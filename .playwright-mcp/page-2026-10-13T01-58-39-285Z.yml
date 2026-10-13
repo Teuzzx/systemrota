@@ -1,0 +1,20 @@
+- generic [active] [ref=f6e1]:
+  - link "Pular para o conteudo" [ref=f6e2] [cursor=pointer]:
+    - /url: "#conteudo"
+  - main [ref=f6e3]:
+    - generic [ref=f6e4]:
+      - generic [ref=f6e5]:
+        - heading "Rota" [level=1] [ref=f6e6]
+        - paragraph [ref=f6e7]: Painel administrativo de operacao logistica
+      - generic [ref=f6e9]:
+        - heading "Entrar" [level=2] [ref=f6e10]
+        - generic [ref=f6e11]:
+          - generic [ref=f6e12]: Usuario ou e-mail
+          - textbox "Usuario ou e-mail" [ref=f6e13]: admin@demo.rota.invalid
+        - generic [ref=f6e14]:
+          - generic [ref=f6e15]: Senha
+          - textbox "Senha" [ref=f6e16]: RotaDemo#2026
+        - button "Entrar" [ref=f6e17] [cursor=pointer]
+        - button "Esqueci minha senha" [ref=f6e18] [cursor=pointer]
+      - paragraph [ref=f6e19]: Acesso restrito a pessoal autorizado. Todas as acoes ficam registradas em auditoria.
+  - alert [ref=f6e20]

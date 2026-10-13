@@ -4,7 +4,7 @@ import { Type } from 'class-transformer';
 import { ArrayNotEmpty, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { RouteStatus } from '@prisma/client';
 import { Permission } from '@rota/shared';
-import { CurrentUser, RequirePermissions } from '../../auth/guards';
+import { CurrentUser, RequireAnyPermission, RequirePermissions } from '../../auth/guards';
 import { RoutesService } from './routes.service';
 
 class CreateRouteDto {
@@ -79,7 +79,8 @@ export class RoutesController {
   }
 
   @Get('assigned')
-  @RequirePermissions(Permission.JOURNEYS_READ_OWN, Permission.ROUTES_READ)
+  // OU: o motorista le a propria rota atribuida; a operacao le qualquer rota.
+  @RequireAnyPermission(Permission.JOURNEYS_READ_OWN, Permission.ROUTES_READ)
   @ApiOperation({ summary: 'Rotas atribuidas a um motorista em uma data (consumo do app).' })
   assigned(@Query('driverId') driverId: string, @Query('date') date?: string) {
     return this.routes.assignedToDriver(driverId, date);

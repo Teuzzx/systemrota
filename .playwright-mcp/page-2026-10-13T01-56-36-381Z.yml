@@ -1,0 +1,6 @@
+- generic [active] [ref=f1e1]:
+  - link "Pular para o conteudo" [ref=f1e2] [cursor=pointer]:
+    - /url: "#conteudo"
+  - status [ref=f1e15]:
+    - generic [ref=f1e16]: Verificando sessao...
+  - alert [ref=f1e17]

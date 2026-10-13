@@ -1,0 +1,150 @@
+- generic [active] [ref=f6e1]:
+  - link "Pular para o conteudo" [ref=f6e208] [cursor=pointer]:
+    - /url: "#conteudo"
+  - generic [ref=f6e209]:
+    - complementary [ref=f6e210]:
+      - generic [ref=f6e211]:
+        - generic [ref=f6e212]: Rota
+        - generic [ref=f6e213]: Painel operacional
+      - navigation "Navegacao principal" [ref=f6e214]:
+        - generic [ref=f6e215]:
+          - generic [ref=f6e216]: Operacao
+          - list [ref=f6e217]:
+            - listitem [ref=f6e218]:
+              - link "Dashboard" [ref=f6e219] [cursor=pointer]:
+                - /url: /painel
+            - listitem [ref=f6e225]:
+              - link "Mapa operacional" [ref=f6e226] [cursor=pointer]:
+                - /url: /painel/mapa
+            - listitem [ref=f6e230]:
+              - link "Motoristas" [ref=f6e231] [cursor=pointer]:
+                - /url: /painel/motoristas
+        - generic [ref=f6e237]:
+          - generic [ref=f6e238]: Planejamento
+          - list [ref=f6e239]:
+            - listitem [ref=f6e240]:
+              - link "Rotas" [ref=f6e241] [cursor=pointer]:
+                - /url: /painel/rotas
+            - listitem [ref=f6e246]:
+              - link "Clientes" [ref=f6e247] [cursor=pointer]:
+                - /url: /painel/clientes
+        - generic [ref=f6e252]:
+          - generic [ref=f6e253]: Analise
+          - list [ref=f6e254]:
+            - listitem [ref=f6e255]:
+              - link "Historico de jornadas" [ref=f6e256] [cursor=pointer]:
+                - /url: /painel/jornadas
+            - listitem [ref=f6e260]:
+              - link "Alertas" [ref=f6e261] [cursor=pointer]:
+                - /url: /painel/alertas
+            - listitem [ref=f6e265]:
+              - link "Relatorios" [ref=f6e266] [cursor=pointer]:
+                - /url: /painel/relatorios
+      - generic [ref=f6e271]: Operacao de Picos · PI
+    - generic [ref=f6e272]:
+      - banner [ref=f6e273]:
+        - generic [ref=f6e274]:
+          - generic [ref=f6e275]: Administrador (DEMO)
+          - generic [ref=f6e276]: ADMINISTRADOR
+        - generic [ref=f6e277]:
+          - time [ref=f6e278]: 22:59:01
+          - generic [ref=f6e279]: AO VIVO
+          - button "Sair" [ref=f6e282] [cursor=pointer]
+      - main [ref=f6e287]:
+        - generic [ref=f6e288]:
+          - generic [ref=f6e289]:
+            - generic [ref=f6e290]:
+              - heading "Dashboard operacional" [level=1] [ref=f6e291]
+              - paragraph [ref=f6e292]: Indicadores calculados do banco de dados · atualizado 22:58:56
+            - button "Atualizar" [ref=f6e293] [cursor=pointer]
+          - generic [ref=f6e297]:
+            - strong [ref=f6e298]: "Atencao:"
+            - text: ha dados de demonstracao em exibicao (identificados como DEMO). Nao representam a operacao real.
+          - generic [ref=f6e299]:
+            - generic [ref=f6e301]:
+              - heading "Progresso do dia" [level=2] [ref=f6e302]
+              - paragraph [ref=f6e303]: Visitas concluidas sobre visitas planejadas
+            - generic [ref=f6e305]:
+              - generic [ref=f6e306]:
+                - generic [ref=f6e307]: Conclusao
+                - generic [ref=f6e308]: Sem dado suficiente para calcular.
+              - generic [ref=f6e309]:
+                - generic [ref=f6e310]: Frota em jornada
+                - generic [ref=f6e311]:
+                  - text: "1"
+                  - generic [ref=f6e312]: de 1 motoristas
+                - paragraph [ref=f6e313]: 1 com posicao atual · 0 desatualizada
+              - generic [ref=f6e314]:
+                - generic [ref=f6e315]: Rotas
+                - generic [ref=f6e316]: 3planejadas
+                - paragraph [ref=f6e317]: 1 em andamento · 0 concluidas
+          - region "Indicadores de frota e rotas" [ref=f6e318]:
+            - generic [ref=f6e319]:
+              - generic [ref=f6e320]: Motoristas cadastrados
+              - generic [ref=f6e321]: "1"
+              - generic [ref=f6e322]: 1 em jornada
+            - generic [ref=f6e323]:
+              - generic [ref=f6e324]: Com localizacao atual
+              - generic [ref=f6e325]: "1"
+              - generic [ref=f6e326]: 0 com dado desatualizado
+            - generic [ref=f6e327]:
+              - generic [ref=f6e328]: Rotas planejadas
+              - generic [ref=f6e329]: "3"
+              - generic [ref=f6e330]: 1 em andamento · 0 concluidas
+            - generic [ref=f6e331]:
+              - generic [ref=f6e332]: Alertas em aberto
+              - generic [ref=f6e333]: "0"
+              - generic [ref=f6e334]: 0 ocorrencias aguardando acompanhamento
+          - region "Progresso de visitas" [ref=f6e335]:
+            - generic [ref=f6e336]:
+              - generic [ref=f6e337]: Clientes planejados
+              - generic [ref=f6e338]: "0"
+              - generic [ref=f6e339]: 0 restantes
+            - generic [ref=f6e340]:
+              - generic [ref=f6e341]: Clientes atendidos
+              - generic [ref=f6e342]: "0"
+              - generic [ref=f6e343]: "-- de conclusao"
+            - generic [ref=f6e344]:
+              - generic [ref=f6e345]: Nao realizados
+              - generic [ref=f6e346]: "0"
+              - generic [ref=f6e347]: com justificativa registrada
+            - generic [ref=f6e348]:
+              - generic [ref=f6e349]: Distancia percorrida
+              - generic [ref=f6e350]: 2,5 km
+              - generic [ref=f6e351]: Distancia por GPS e estimativa, nao leitura de hodometro.
+          - region "Tempos e alertas" [ref=f6e352]:
+            - generic [ref=f6e353]:
+              - generic [ref=f6e355]:
+                - heading "Tempos de atendimento" [level=2] [ref=f6e356]
+                - paragraph [ref=f6e357]: Medidos a partir dos eventos registrados
+              - generic [ref=f6e359]:
+                - generic [ref=f6e360]:
+                  - term [ref=f6e361]: Tempo total em atendimento
+                  - definition [ref=f6e362]: 0s
+                - generic [ref=f6e363]:
+                  - term [ref=f6e364]: Tempo total em deslocamento
+                  - definition [ref=f6e365]: 0s
+                - generic [ref=f6e366]:
+                  - term [ref=f6e367]: Atendimento medio
+                  - definition [ref=f6e368]:
+                    - text: "--"
+                    - generic [ref=f6e369]: (0 amostras)
+                - generic [ref=f6e370]:
+                  - term [ref=f6e371]: Atendimento mediano
+                  - definition [ref=f6e372]: "--"
+            - generic [ref=f6e373]:
+              - generic [ref=f6e375]:
+                - heading "Posicoes mais recentes" [level=2] [ref=f6e376]
+                - paragraph [ref=f6e377]: Idade do dado e sempre exibida
+              - list [ref=f6e379]:
+                - listitem [ref=f6e380]:
+                  - generic [ref=f6e381]:
+                    - generic [ref=f6e382]: Motorista Demo (DEMO)
+                    - generic [ref=f6e383]: Rota R1 · ha 2 min
+                  - generic [ref=f6e384]: ATUAL
+          - generic [ref=f6e386]:
+            - generic [ref=f6e388]:
+              - heading "Alertas recentes" [level=2] [ref=f6e389]
+              - paragraph [ref=f6e390]: Somente alertas com dado verificavel
+            - paragraph [ref=f6e392]: Nenhum alerta registrado.
+  - alert [ref=f6e393]

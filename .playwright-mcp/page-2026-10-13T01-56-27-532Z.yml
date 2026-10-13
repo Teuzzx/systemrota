@@ -1,0 +1,56 @@
+- generic [active] [ref=e1]:
+  - link "Pular para o conteudo" [ref=e2] [cursor=pointer]:
+    - /url: "#conteudo"
+  - alert [ref=e20]: Rota — Painel de Operacao Logistica
+  - generic [ref=e21]:
+    - complementary [ref=e22]:
+      - generic [ref=e23]:
+        - generic [ref=e24]: Rota
+        - generic [ref=e25]: Painel operacional
+      - navigation "Navegacao principal" [ref=e26]:
+        - generic [ref=e27]:
+          - generic [ref=e28]: Operacao
+          - list [ref=e29]:
+            - listitem [ref=e30]:
+              - link "Dashboard" [ref=e31] [cursor=pointer]:
+                - /url: /painel
+            - listitem [ref=e37]:
+              - link "Mapa operacional" [ref=e38] [cursor=pointer]:
+                - /url: /painel/mapa
+            - listitem [ref=e42]:
+              - link "Motoristas" [ref=e43] [cursor=pointer]:
+                - /url: /painel/motoristas
+        - generic [ref=e49]:
+          - generic [ref=e50]: Planejamento
+          - list [ref=e51]:
+            - listitem [ref=e52]:
+              - link "Rotas" [ref=e53] [cursor=pointer]:
+                - /url: /painel/rotas
+            - listitem [ref=e58]:
+              - link "Clientes" [ref=e59] [cursor=pointer]:
+                - /url: /painel/clientes
+        - generic [ref=e64]:
+          - generic [ref=e65]: Analise
+          - list [ref=e66]:
+            - listitem [ref=e67]:
+              - link "Historico de jornadas" [ref=e68] [cursor=pointer]:
+                - /url: /painel/jornadas
+            - listitem [ref=e72]:
+              - link "Alertas" [ref=e73] [cursor=pointer]:
+                - /url: /painel/alertas
+            - listitem [ref=e77]:
+              - link "Relatorios" [ref=e78] [cursor=pointer]:
+                - /url: /painel/relatorios
+      - generic [ref=e83]: Operacao de Picos · PI
+    - generic [ref=e84]:
+      - banner [ref=e85]:
+        - generic [ref=e86]:
+          - generic [ref=e87]: Administrador (DEMO)
+          - generic [ref=e88]: ADMINISTRADOR
+        - generic [ref=e89]:
+          - time [ref=e90]: 22:56:27
+          - generic [ref=e91]: AO VIVO
+          - button "Sair" [ref=e94] [cursor=pointer]
+      - main [ref=e99]:
+        - status [ref=e100]:
+          - generic [ref=e101]: Carregando indicadores...

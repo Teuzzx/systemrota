@@ -1,10 +1,10 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
+﻿import { Body, Controller, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Connectivity, JourneyEventType } from '@prisma/client';
 import { Permission } from '@rota/shared';
-import { CurrentUser, RequirePermissions } from '../../auth/guards';
+import { CurrentUser, RequireAnyPermission, RequirePermissions } from '../../auth/guards';
 import { LocationsService, LocationPointInput, SyncEventInput } from './locations.service';
 
 class LocationPointDto implements LocationPointInput {
@@ -91,7 +91,7 @@ export class LocationsController {
   }
 
   @Get('locations/journeys/:journeyId/track')
-  @RequirePermissions(Permission.LOCATIONS_READ_ALL, Permission.LOCATIONS_READ_OWN)
+  @RequireAnyPermission(Permission.LOCATIONS_READ_ALL, Permission.LOCATIONS_READ_OWN)
   @ApiOperation({
     summary: 'Trajeto efetivamente registrado da jornada.',
     description: 'Sem pontos registrados, retorna lista vazia com isRealData=false: nada e desenhado por invencao.',

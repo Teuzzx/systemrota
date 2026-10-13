@@ -18,8 +18,25 @@ export const IS_PUBLIC_KEY = 'rota:isPublic';
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 
 export const REQUIRED_PERMISSIONS_KEY = 'rota:permissions';
+/** Semantica E: o chamador precisa de TODAS as permissoes listadas. */
 export const RequirePermissions = (...permissions: Permission[]) =>
   SetMetadata(REQUIRED_PERMISSIONS_KEY, permissions);
+
+/**
+ * Semantica OU: basta UMA das permissoes listadas.
+ *
+ * Existe separada da anterior porque os dois casos aparecem de verdade no
+ * projeto, e misturar os dois num so decorador ja causou bug: o padrao
+ * "proprio OU todos" (`journeys:read:own` OU `journeys:read:all`) escrito com
+ * `RequirePermissions` exige as DUAS — e como nenhum perfil tem as duas, nem
+ * o motorista conseguia abrir a propria jornada nem o administrador a de
+ * outrem. O guard calcula "quais faltam" (filter), nao "falta alguma".
+ *
+ * Ao criar rota com escopo "proprio ou todos", use ESTE decorador.
+ */
+export const REQUIRED_ANY_PERMISSION_KEY = 'rota:permissionsAny';
+export const RequireAnyPermission = (...permissions: Permission[]) =>
+  SetMetadata(REQUIRED_ANY_PERMISSION_KEY, permissions);
 
 export const REQUIRED_ROLES_KEY = 'rota:roles';
 export const RequireRoles = (...roles: RoleKey[]) => SetMetadata(REQUIRED_ROLES_KEY, roles);
@@ -58,11 +75,15 @@ export class PermissionsGuard {
       context.getHandler(),
       context.getClass(),
     ]);
+    const requiredAny = this.reflector.getAllAndOverride<Permission[]>(REQUIRED_ANY_PERMISSION_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     const requiredRoles = this.reflector.getAllAndOverride<RoleKey[]>(REQUIRED_ROLES_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-    if (!required?.length && !requiredRoles?.length) return true;
+    if (!required?.length && !requiredAny?.length && !requiredRoles?.length) return true;
 
     const request = context.switchToHttp().getRequest<Request & { principal?: AuthPrincipal }>();
     const principal = request.principal;
@@ -81,9 +102,23 @@ export class PermissionsGuard {
         ...permissionsForRoles(principal.roles),
         ...principal.permissions,
       ]);
+      // AND: todas precisam estar concedidas.
       const missing = required.filter((p) => !granted.has(p));
       if (missing.length > 0) {
         throw new ForbiddenException(`Permissao negada: ${missing.join(', ')}.`);
+      }
+    }
+    if (requiredAny?.length) {
+      const granted = new Set<Permission>([
+        ...permissionsForRoles(principal.roles),
+        ...principal.permissions,
+      ]);
+      // OR: uma basta.
+      const ok = requiredAny.some((p) => granted.has(p));
+      if (!ok) {
+        throw new ForbiddenException(
+          `Permissao negada: requer uma de ${requiredAny.join(', ')}.`,
+        );
       }
     }
     return true;

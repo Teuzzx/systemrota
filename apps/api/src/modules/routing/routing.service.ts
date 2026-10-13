@@ -1,5 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { RoutingProvider, HeuristicRoutingProvider, LegEstimate, LatLon } from '@rota/shared';
+import {
+  RoutingProvider, HeuristicRoutingProvider, LegEstimate, LatLon, RouteGeometry,
+} from '@rota/shared';
 import { APP_CONFIG, AppConfig } from '../../config/configuration';
 
 /**
@@ -18,22 +20,61 @@ export class OsrmRoutingProvider implements RoutingProvider {
   async estimateLeg(from: LatLon, to: LatLon): Promise<LegEstimate> {
     const coords = `${from.longitude},${from.latitude};${to.longitude},${to.latitude}`;
     const url = `${this.baseUrl.replace(/\/$/, '')}/route/v1/driving/${coords}?overview=false`;
+    const response = await this.fetchJson(url);
+    const body = response as {
+      code: string;
+      routes?: Array<{ distance: number; duration: number }>;
+    };
+    if (body.code !== 'Ok' || !body.routes?.[0]) throw new Error(`OSRM code=${body.code}`);
+    const route = body.routes[0];
+    return {
+      distanceM: Math.round(route.distance),
+      durationS: Math.round(route.duration),
+      networkBased: true,
+    };
+  }
+
+  /**
+   * Geometria REAL sobre a malha viaria.
+   *
+   * `overview=full` + `geometries=geojson` faz o OSRM devolver os pontos do
+   * caminho pelas ruas. E isso que permite desenhar a rota sobre o mapa de
+   * verdade, em vez de um segmento reto ligando os clientes.
+   *
+   * `annotations=false` reduz o payload; so precisamos da geometria.
+   */
+  async geometry(waypoints: LatLon[]): Promise<RouteGeometry> {
+    if (waypoints.length < 2) {
+      return { points: waypoints.map((p) => ({ ...p })), networkBased: false };
+    }
+    const coords = waypoints.map((p) => `${p.longitude},${p.latitude}`).join(';');
+    const url =
+      `${this.baseUrl.replace(/\/$/, '')}/route/v1/driving/${coords}` +
+      `?overview=full&geometries=geojson&annotations=false`;
+    const body = (await this.fetchJson(url)) as {
+      code: string;
+      routes?: Array<{
+        geometry?: { type?: string; coordinates?: number[][] };
+      }>;
+    };
+    if (body.code !== 'Ok' || !body.routes?.[0]?.geometry?.coordinates?.length) {
+      throw new Error(`OSRM sem geometria (code=${body.code})`);
+    }
+    // GeoJSON e [longitude, latitude] — a ordem oposta de LatLon.
+    const points = body.routes[0].geometry.coordinates
+      .filter((c) => Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]))
+      .map((c) => ({ latitude: c[1], longitude: c[0] }));
+    if (points.length < 2) throw new Error('OSRM devolveu geometria degenerada');
+    return { points, networkBased: true };
+  }
+
+  private async fetchJson(url: string): Promise<unknown> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) throw new Error(`OSRM respondeu ${response.status}`);
-      const body = (await response.json()) as {
-        code: string;
-        routes?: Array<{ distance: number; duration: number }>;
-      };
-      if (body.code !== 'Ok' || !body.routes?.[0]) throw new Error(`OSRM code=${body.code}`);
-      const route = body.routes[0];
-      return {
-        distanceM: Math.round(route.distance),
-        durationS: Math.round(route.duration),
-        networkBased: true,
-      };
+      return await response.json();
     } finally {
       clearTimeout(timer);
     }
@@ -132,5 +173,28 @@ export class RoutingService implements OnModuleInit {
       const fallbackLeg = await this.fallback.estimateLeg(from, to);
       return { ...fallbackLeg, networkBased: false };
     }
+  }
+
+  /**
+   * Geometria do trajeto para desenhar no mapa.
+   *
+   * Se o provider de rede falhar, cai para linha reta e marca
+   * `networkBased: false`. O requisito e que o chamador NUNCA apresente esse
+   * retorno como "rota pelas ruas": a flag existe para isso.
+   */
+  async geometry(waypoints: LatLon[]): Promise<RouteGeometry> {
+    if (waypoints.length < 2) {
+      return { points: waypoints.map((p) => ({ ...p })), networkBased: false };
+    }
+    if (this.primary.networkBased && this.primary.geometry) {
+      try {
+        return await this.primary.geometry(waypoints);
+      } catch (error) {
+        this.logger.warn(
+          `Geometria de ${this.primary.name} indisponivel (${String(error)}). Usando linha reta estimada.`,
+        );
+      }
+    }
+    return { points: waypoints.map((p) => ({ ...p })), networkBased: false };
   }
 }

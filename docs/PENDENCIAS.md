@@ -26,8 +26,23 @@ exigem credencial e têm custo.
 Toda estimativa sai rotulada como estimada. A troca é uma variável de ambiente
 (`ROUTING_PROVIDER`), sem mudança de código — ver ADR-0004.
 **Necessário do cliente:** decidir entre OSRM self-hosted (custo de servidor,
-sem limite de uso) ou API comercial (custo por requisição). Também decidir se
-o painel exibirá base cartográfica real (hoje o mapa é SVG offline, sem chave).
+sem limite de uso) ou API comercial (custo por requisição).
+
+> **Resolvido pela metade em 2026-10-13 — base cartográfica.** O mapa SVG
+> offline foi substituído por **Leaflet + OpenStreetMap**, sem chave e sem
+> custo. Ruas, bairros, cidades e estradas reais aparecem com zoom e
+> deslocamento; a atribuição ODbL é exibida e os provedores comerciais
+> (MapTiler, Stadia) estão declarados mas **desativados**, aguardando
+> autorização. Trocar de provedor é uma entrada em
+> `apps/web/src/lib/map/providers.ts` + `NEXT_PUBLIC_TILE_PROVIDER`.
+>
+> **O que continua pendente é o trajeto sobre a via.** O backend agora expõe
+> `POST /api/routing/geometry`, que devolve geometria real do OSRM
+> (`overview=full`). Sem `ROUTING_PROVIDER=osrm` e `OSRM_BASE_URL`, a resposta
+> é linha reta com `networkBased: false` e o painel rotula como **estimativa** —
+> nunca como rota. Para ativar: rodar um OSRM self-hosted (grátis) ou contratar
+> um serviço. Enquanto isso, **o mapa mostra ruas reais, mas os trajetos
+> desenhados são retas estimadas**, e a tela avisa isso explicitamente.
 
 ## P-03 · Domínio, HTTPS e hospedagem
 **Bloqueia:** emissão de APK confiável e operação em produção.

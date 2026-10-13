@@ -1,189 +1,271 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { CircleMarker, MapContainer, Polyline, TileLayer, Tooltip, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import type { DriverPosition } from '@/lib/types';
 import { formatDataAge } from '@/lib/format';
+import { activeTileProvider, OPERACAO_CENTER } from '@/lib/map/providers';
+import {
+  boundsOf, describeGeometrySource, isDegenerateBounds, sanitizePath, toLatLon,
+  type LatLon,
+} from '@/lib/map/geometry';
 
 /**
- * Mapa operacional.
+ * Mapa operacional sobre Leaflet + OpenStreetMap.
  *
- * Renderizador PADRAO: SVG deterministico, sem tile, sem chave, sem rede.
- * Funciona em qualquer rede - importante porque o provedor de mapas nao pode
- * ser assumido disponivel (ver docs/PENDENCIAS.md).
+ * Decisoes que valem registro:
  *
- * Um `TileProvider` pode ser plugado (MapLibre/Mapbox) quando houver credencial:
- * a interface abaixo mantem a troca isolada deste componente.
+ * 1. **CircleMarker em vez de Marker.** O pino padrao do Leaflet depende de
+ *    arquivos PNG resolvidos por caminho em tempo de build, o que quebra em
+ *    bundlers. CircleMarker e SVG puro, nao tem asset e herda a paleta do
+ *    painel.
+ *
+ * 2. **Nada e desenhado sem coordenada real.** Marcador so aparece quando o
+ *    registro tem lat/lng valido. Ausente vira "pendente de geolocalizacao" na
+ *    lista, nunca um ponto inventado no mapa.
+ *
+ * 3. **Trajado distingue planejamento de registro** — tracejado vs. solido —
+ *    e distingue malha viaria de linha reta, conforme `geometryNetworkBased`.
  */
-export interface TileProvider {
-  readonly name: string;
-  readonly requiresCredential: boolean;
-  /** URL de estilo; quando ausente, usamos o renderizador offline. */
-  styleUrl?: string;
-}
 
-export const OFFLINE_PROVIDER: TileProvider = {
-  name: 'offline-svg',
-  requiresCredential: false,
-};
+export type MarkerStatus = 'ok' | 'progress' | 'warn' | 'neutral' | 'critical';
 
-export interface MapMarker {
+export interface MapStop {
   id: string;
   latitude: number | null;
   longitude: number | null;
-  kind: 'driver' | 'stop' | 'origin';
-  status: 'ok' | 'progress' | 'warn' | 'neutral' | 'critical';
+  status: MarkerStatus;
   label: string;
-  ageSeconds?: number | null;
+  sequence?: number;
+  isDemo?: boolean;
 }
 
-const COLOR: Record<MapMarker['status'], string> = {
-  ok: 'var(--status-ok)',
-  progress: 'var(--status-progress)',
-  warn: 'var(--status-warn)',
-  neutral: 'var(--status-neutral)',
-  critical: 'var(--status-critical)',
-};
+/** Origem da geometria recebida da API. */
+export interface GeometrySource {
+  networkBased: boolean;
+  provider: string;
+}
 
-const WIDTH = 900;
-const HEIGHT = 520;
-const PAD = 48;
+/** Aplica zoom automatico quando o conjunto de pontos muda. */
+function FitToPoints({ points }: { points: LatLon[] }) {
+  const map = useMap();
+  const bounds = useMemo(() => boundsOf(points), [points]);
 
-/** Projecao equirretangular ajustada ao bounding box dos pontos. */
-export function project(
-  points: Array<{ latitude: number; longitude: number }>,
-): (lat: number, lng: number) => { x: number; y: number } {
-  if (points.length === 0) return () => ({ x: WIDTH / 2, y: HEIGHT / 2 });
-  const lats = points.map((p) => p.latitude);
-  const lngs = points.map((p) => p.longitude);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  // Degeneracao: um unico ponto (ou todos iguais) nao pode dividir por zero.
-  const latSpan = Math.max(maxLat - minLat, 1e-6);
-  const lngSpan = Math.max(maxLng - minLng, 1e-6);
-  return (lat: number, lng: number) => ({
-    x: PAD + ((lng - minLng) / lngSpan) * (WIDTH - PAD * 2),
-    // Tela cresce para baixo; latitude cresce para cima.
-    y: HEIGHT - PAD - ((lat - minLat) / latSpan) * (HEIGHT - PAD * 2),
-  });
+  useEffect(() => {
+    if (!bounds || bounds === undefined) return;
+    if (isDegenerateBounds(bounds)) {
+      // Um unico ponto nao tem area; zoom fixo evita divisao por zero.
+      const first = points[0];
+      if (first) map.setView([first.latitude, first.longitude], 14, { animate: false });
+      return;
+    }
+    map.fitBounds(
+      [
+        [bounds.minLat, bounds.minLng],
+        [bounds.maxLat, bounds.maxLng],
+      ],
+      { padding: [48, 48], maxZoom: 16, animate: false },
+    );
+    // `bounds` e derivado de `points`; recriar so quando os pontos mudam.
+  }, [map, bounds, points]);
+
+  return null;
+}
+
+/** Centro inicial: area da operacao quando ainda nao ha ponto algum. */
+function InitialView({ points }: { points: LatLon[] }) {
+  const map = useMap();
+  useEffect(() => {
+    const first = points[0];
+    if (!first) {
+      map.setView([OPERACAO_CENTER.latitude, OPERACAO_CENTER.longitude], OPERACAO_CENTER.zoom, {
+        animate: false,
+      });
+    }
+  }, [map, points]);
+  return null;
+}
+
+function statusColor(status: MarkerStatus): string {
+  switch (status) {
+    case 'ok': return 'var(--status-ok)';
+    case 'progress': return 'var(--status-progress)';
+    case 'warn': return 'var(--status-warn)';
+    case 'critical': return 'var(--status-critical)';
+    default: return 'var(--status-neutral)';
+  }
 }
 
 export function OperationalMap({
-  drivers, stops, track, plannedTrack, provider = OFFLINE_PROVIDER, selectedDriverId, onSelectDriver,
+  drivers, stops, track, plannedTrack, geometrySource, selectedDriverId, onSelectDriver,
 }: {
   drivers: DriverPosition[];
-  stops: Array<{ id: string; latitude: number | null; longitude: number | null; status: MapMarker['status']; label: string }>;
+  stops: MapStop[];
   track?: Array<{ latitude: number; longitude: number }>;
   plannedTrack?: Array<{ latitude: number; longitude: number }>;
-  provider?: TileProvider;
+  /** Quando ausente, o trajeto e tratado como estimativa (nunca como rota real). */
+  geometrySource?: GeometrySource;
   selectedDriverId?: string | null;
   onSelectDriver?: (driverId: string) => void;
 }) {
-  const projectPoint = useMemo(() => {
-    const all = [
-      ...drivers.map((d) => ({ latitude: d.latitude, longitude: d.longitude })),
-      ...stops.filter((s) => s.latitude !== null).map((s) => ({ latitude: s.latitude as number, longitude: s.longitude as number })),
-      ...(track ?? []),
-      ...(plannedTrack ?? []),
-    ];
-    return project(all);
-  }, [drivers, stops, track, plannedTrack]);
+  const provider = activeTileProvider();
 
-  const polyline = (points: Array<{ latitude: number; longitude: number }> | undefined) =>
-    (points ?? []).map((p) => {
-      const { x, y } = projectPoint(p.latitude, p.longitude);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
+  const trackPath = useMemo(() => sanitizePath(track), [track]);
+  const plannedPath = useMemo(() => sanitizePath(plannedTrack), [plannedTrack]);
 
-  const hasBaseLayer = Boolean(provider.styleUrl);
+  // Fonte da geometria: padrao e "nao basedada em rede", nunca assumida real.
+  const source: GeometrySource = geometrySource ?? { networkBased: false, provider: 'desconhecido' };
+
+  const allPoints = useMemo<LatLon[]>(() => {
+    const fromDrivers = drivers
+      .map((d) => toLatLon(d.latitude, d.longitude))
+      .filter((p): p is LatLon => p !== null);
+    const fromStops = stops
+      .map((s) => toLatLon(s.latitude, s.longitude))
+      .filter((p): p is LatLon => p !== null);
+    return [...fromDrivers, ...fromStops, ...trackPath, ...plannedPath];
+  }, [drivers, stops, trackPath, plannedPath]);
+
+  const hasDemo = drivers.some((d) => d.driverName.includes('DEMO')) || stops.some((s) => s.isDemo);
+
+  const center: [number, number] = allPoints.length > 0
+    ? [allPoints[0].latitude, allPoints[0].longitude]
+    : [OPERACAO_CENTER.latitude, OPERACAO_CENTER.longitude];
 
   return (
-    <div className="relative">
-      <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        className="w-full rounded-md border border-border-subtle bg-base"
-        role="img"
-        aria-label="Mapa operacional com posicoes de motoristas e clientes da rota"
-      >
-        {hasBaseLayer ? null : (
-          <g aria-hidden>
-            {/* Grade discreta: serve de referencia sem inventar geografia. */}
-            {Array.from({ length: 10 }, (_, i) => (
-              <line key={`h${i}`} x1={0} y1={(i * HEIGHT) / 10} x2={WIDTH} y2={(i * HEIGHT) / 10} stroke="var(--border-subtle)" strokeWidth={1} />
-            ))}
-            {Array.from({ length: 16 }, (_, i) => (
-              <line key={`v${i}`} x1={(i * WIDTH) / 16} y1={0} x2={(i * WIDTH) / 16} y2={HEIGHT} stroke="var(--border-subtle)" strokeWidth={1} />
-            ))}
-          </g>
-        )}
+    <div className="flex flex-col gap-2">
+      <div className="relative overflow-hidden rounded-md border border-border-subtle">
+        <MapContainer
+          center={center}
+          zoom={OPERACAO_CENTER.zoom}
+          scrollWheelZoom
+          style={{ height: 520, width: '100%' }}
+          className="bg-base"
+        >
+          {/*
+            Atribuicao e obrigatoria por lei (ODbL) e por politica do OSM.
+            Nao remover nem ocultar sem um provedor proprio com licenca propria.
+          */}
+          <TileLayer
+            url={provider.url}
+            attribution={provider.attribution}
+            maxZoom={provider.maxZoom}
+            // Passar `undefined` explicitamente SUBSTITUI o default do Leaflet
+            // ('abc') em vez de deixar o default agir, e o _getSubdomain quebra
+            // com "Cannot read properties of undefined". Por isso o fallback.
+            subdomains={provider.subdomains ?? 'abc'}
+          />
 
-        {/* Trajeto PLANEJADO: tracejado. Nunca confundido com o registrado. */}
-        {plannedTrack && plannedTrack.length > 1 ? (
-          <polyline points={polyline(plannedTrack)} fill="none" stroke="var(--status-neutral)" strokeWidth={2} strokeDasharray="6 6" />
+          <InitialView points={allPoints} />
+          {allPoints.length > 0 ? <FitToPoints points={allPoints} /> : null}
+
+          {/* Trajeto PLANEJADO: tracejado. Nunca confundido com o registrado. */}
+          {plannedPath.length > 1 ? (
+            <Polyline
+              positions={plannedPath.map((p) => [p.latitude, p.longitude] as [number, number])}
+              pathOptions={{ color: 'var(--status-neutral)', weight: 3, dashArray: '7 7', opacity: 0.9 }}
+            />
+          ) : null}
+
+          {/* Trajeto REGISTRADO: solido. */}
+          {trackPath.length > 1 ? (
+            <Polyline
+              positions={trackPath.map((p) => [p.latitude, p.longitude] as [number, number])}
+              pathOptions={{
+                color: 'var(--accent)',
+                weight: 4,
+                opacity: source.networkBased ? 1 : 0.55,
+                // Linha reta e desenhada pontilhado-fino para nao parecer rota.
+                dashArray: source.networkBased ? undefined : '2 8',
+              }}
+            />
+          ) : null}
+
+          {/* Clientes: circulo pequeno, sequencia quando houver. */}
+          {stops.map((stop) => {
+            const point = toLatLon(stop.latitude, stop.longitude);
+            // Sem coordenada valida: nada e desenhado. O filtro acontece aqui.
+            if (!point) return null;
+            return (
+              <CircleMarker
+                key={stop.id}
+                center={[point.latitude, point.longitude]}
+                radius={6}
+                pathOptions={{
+                  color: 'var(--bg-base)',
+                  weight: 2,
+                  fillColor: statusColor(stop.status),
+                  fillOpacity: 0.95,
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -6]}>
+                  <span className="font-medium">
+                    {stop.sequence ? `${stop.sequence}. ` : ''}{stop.label}
+                  </span>
+                  {stop.isDemo ? <span className="ml-1 text-xs uppercase">(DEMO)</span> : null}
+                </Tooltip>
+              </CircleMarker>
+            );
+          })}
+
+          {/* Motoristas: circulo maior com anel quando o dado e antigo. */}
+          {drivers.map((driver) => {
+            const point = toLatLon(driver.latitude, driver.longitude);
+            if (!point) return null;
+            const stale =
+              driver.freshness === 'DESATUALIZADO' || driver.freshness === 'PARCIALMENTE_ATUALIZADO';
+            const tone: MarkerStatus =
+              driver.freshness === 'ATUAL'
+                ? 'ok'
+                : driver.freshness === 'PARCIALMENTE_ATUALIZADO'
+                  ? 'warn'
+                  : driver.freshness === 'INDISPONIVEL'
+                    ? 'neutral'
+                    : 'critical';
+            const selected = driver.driverId === selectedDriverId;
+            return (
+              <CircleMarker
+                key={driver.driverId}
+                center={[point.latitude, point.longitude]}
+                radius={selected ? 10 : 8}
+                pathOptions={{
+                  color: selected ? 'var(--accent)' : stale ? statusColor(tone) : 'var(--bg-base)',
+                  weight: selected || stale ? 3 : 2,
+                  // Anel tracejado = dado desatualizado (mesma semantica do SVG antigo).
+                  dashArray: stale ? '4 4' : undefined,
+                  fillColor: statusColor(tone),
+                  fillOpacity: 0.95,
+                }}
+                eventHandlers={onSelectDriver ? { click: () => onSelectDriver(driver.driverId) } : undefined}
+              >
+                <Tooltip direction="right" offset={[10, 0]} permanent={false}>
+                  <span className="font-medium">{driver.driverName}</span>
+                  <br />
+                  <span className="text-xs">{formatDataAge(driver.dataAgeSeconds)}</span>
+                  {driver.driverName.includes('DEMO') ? (
+                    <><br /><span className="text-xs uppercase">(DEMO)</span></>
+                  ) : null}
+                </Tooltip>
+              </CircleMarker>
+            );
+          })}
+        </MapContainer>
+
+        {hasDemo ? (
+          <div className="pointer-events-none absolute left-3 top-3 z-[400] rounded-sm border border-status-warn bg-status-warn-dim px-2 py-1 text-label font-semibold uppercase text-status-warn">
+            Dados de demonstracao
+          </div>
         ) : null}
+      </div>
 
-        {/* Trajeto REGISTRADO: solido. */}
-        {track && track.length > 1 ? (
-          <polyline points={polyline(track)} fill="none" stroke="var(--accent)" strokeWidth={2} />
-        ) : null}
-
-        {/* Clientes: losango. */}
-        {stops.map((stop) => {
-          if (stop.latitude === null || stop.longitude === null) return null;
-          const { x, y } = projectPoint(stop.latitude, stop.longitude);
-          return (
-            <polygon
-              key={stop.id}
-              points={`${x},${y - 6} ${x + 6},${y} ${x},${y + 6} ${x - 6},${y}`}
-              fill={COLOR[stop.status]}
-              aria-label={`${stop.label} (${stop.status})`}
-            >
-              <title>{stop.label}</title>
-            </polygon>
-          );
-        })}
-
-        {/* Motoristas: circulo com anel. Anel tracejado = dado desatualizado. */}
-        {drivers.map((driver) => {
-          const { x, y } = projectPoint(driver.latitude, driver.longitude);
-          const stale = driver.freshness === 'DESATUALIZADO' || driver.freshness === 'PARCIALMENTE_ATUALIZADO';
-          const tone = driver.freshness === 'ATUAL' ? 'ok' : driver.freshness === 'PARCIALMENTE_ATUALIZADO' ? 'warn' : 'critical';
-          const selected = driver.driverId === selectedDriverId;
-          return (
-            <g
-              key={driver.driverId}
-              onClick={() => onSelectDriver?.(driver.driverId)}
-              className={onSelectDriver ? 'cursor-pointer' : undefined}
-              role={onSelectDriver ? 'button' : undefined}
-              tabIndex={onSelectDriver ? 0 : undefined}
-              aria-label={`${driver.driverName}, ${formatDataAge(driver.dataAgeSeconds)}`}
-            >
-              {stale ? (
-                <circle cx={x} cy={y} r={14} fill="none" stroke={COLOR[tone]} strokeWidth={2} strokeDasharray="4 4" />
-              ) : null}
-              <circle cx={x} cy={y} r={9} fill={COLOR[tone]} stroke={selected ? 'var(--accent)' : 'var(--bg-base)'} strokeWidth={2} />
-              <text x={x + 14} y={y + 4} fontSize={11} fill="var(--text-primary)" fontFamily="'IBM Plex Mono', monospace">
-                {driver.driverName}
-              </text>
-              <text x={x + 14} y={y + 17} fontSize={10} fill="var(--text-secondary)" fontFamily="'IBM Plex Mono', monospace">
-                {formatDataAge(driver.dataAgeSeconds)}
-              </text>
-              <title>{`${driver.driverName} - ${formatDataAge(driver.dataAgeSeconds)}`}</title>
-            </g>
-          );
-        })}
-      </svg>
-
-      <div className="mt-2 flex flex-wrap items-center gap-4 text-label uppercase text-ink-secondary">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-label uppercase text-ink-secondary">
         <span><span aria-hidden className="mr-1 inline-block h-2 w-2 rounded-full bg-status-ok" />posicao atual</span>
         <span><span aria-hidden className="mr-1 inline-block h-2 w-2 rounded-full bg-status-warn" />parcialmente atualizado</span>
         <span><span aria-hidden className="mr-1 inline-block h-2 w-2 rounded-full bg-status-critical" />desatualizado</span>
-        <span><span aria-hidden className="mr-1 inline-block h-2 w-2 bg-status-neutral" />trajeto planejado (tracejado)</span>
-        <span><span aria-hidden className="mr-1 inline-block h-0.5 w-4 bg-accent" />trajeto registrado</span>
-        <span className="text-ink-muted">
-          Base cartografica: {provider.requiresCredential ? provider.name : 'offline (sem chave)'}
-        </span>
+        <span><span aria-hidden className="mr-1 inline-block h-2 w-2 rounded-full bg-status-neutral" />cliente da rota</span>
+        <span className="text-ink-muted">{describeGeometrySource(source.networkBased, source.provider)}</span>
+        <span className="text-ink-muted">Base: {provider.label}</span>
       </div>
     </div>
   );

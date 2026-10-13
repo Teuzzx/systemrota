@@ -20,10 +20,32 @@ export interface LegEstimate {
   networkBased: boolean;
 }
 
+/**
+ * Geometria de um trajeto.
+ *
+ * `networkBased = false` significa que os pontos sao uma aproximacao em linha
+ * reta, NAO o caminho pelas ruas. A interface existe para deixar essa distincao
+ * visivel ate na tela: desenhar reta e chamar de rota seria apresentar estimativa
+ * como dado.
+ */
+export interface RouteGeometry {
+  points: LatLon[];
+  /** Verdadeiro somente quando os pontos vieram da malha viaria. */
+  networkBased: boolean;
+}
+
 export interface RoutingProvider {
   readonly name: string;
   readonly networkBased: boolean;
   estimateLeg(from: LatLon, to: LatLon): Promise<LegEstimate>;
+  /**
+   * Geometria do trajeto entre os pontos, na ordem dada.
+   *
+   * Opcional de proposito: nem todo provider tem malha viaria. Quando ausente,
+   * a API responde com linha reta marcada como `networkBased: false`, e a tela
+   * rotula como estimativa em vez de rota sobre a via.
+   */
+  geometry?(waypoints: LatLon[]): Promise<RouteGeometry>;
   /** Tempo de atendimento padrao quando cliente/route nao define valor. */
   defaultServiceS?: number;
 }
@@ -50,6 +72,15 @@ export class HeuristicRoutingProvider implements RoutingProvider {
       durationS: Math.round(distanceM / speedMps),
       networkBased: false,
     };
+  }
+
+  /**
+   * Sem malha viaria: devolve os proprios pontos como linha reta e declara
+   * `networkBased: false`. A distincao e o ponto — quem consome sabe que nao
+   * pode apresentar isso como "rota".
+   */
+  async geometry(waypoints: LatLon[]): Promise<RouteGeometry> {
+    return { points: waypoints.map((p) => ({ ...p })), networkBased: false };
   }
 }
 

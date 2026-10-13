@@ -358,11 +358,12 @@ export class JourneysService {
   // --------------------------- Indicadores -------------------------------
 
   /** Linha do tempo da jornada com tempos separados e qualidade declarada. */
-  async buildBreakdown(journeyId: string): Promise<JourneyTimeBreakdown> {
+  async buildBreakdown(journeyId: string, scopeDriverId: string | null = null): Promise<JourneyTimeBreakdown> {
     const journey = await this.prisma.journey.findUniqueOrThrow({
       where: { id: journeyId },
       include: { visits: { orderBy: { sequence: 'asc' } } },
     });
+    this.assertReadScope(journey, scopeDriverId);
     return buildTimeBreakdown(
       journey.startedAt,
       journey.endedAt,
@@ -378,7 +379,7 @@ export class JourneysService {
     );
   }
 
-  async summary(journeyId: string) {
+  async summary(journeyId: string, scopeDriverId: string | null = null) {
     const journey = await this.prisma.journey.findUniqueOrThrow({
       where: { id: journeyId },
       include: {
@@ -391,7 +392,8 @@ export class JourneysService {
         occurrences: true,
       },
     });
-    const breakdown = await this.buildBreakdown(journeyId);
+    this.assertReadScope(journey, scopeDriverId);
+    const breakdown = await this.buildBreakdown(journeyId, scopeDriverId);
     return {
       journey,
       breakdown,
@@ -409,13 +411,14 @@ export class JourneysService {
    * PREVISAO DE CONCLUSAO. Sempre rotulada como estimativa, com nivel de
    * confianca. Nao e horario garantido.
    */
-  async forecast(journeyId: string, defaultServiceS = 900) {
+  async forecast(journeyId: string, defaultServiceS = 900, scopeDriverId: string | null = null) {
     const journey = await this.prisma.journey.findUniqueOrThrow({
       where: { id: journeyId },
       include: {
         visits: { orderBy: { sequence: 'asc' }, include: { customer: true } },
       },
     });
+    this.assertReadScope(journey, scopeDriverId);
     const remaining = journey.visits.filter((v) => !(CLOSED_VISIT_STATUSES as readonly VisitStatus[]).includes(v.status));
 
     const historical = journey.visits
@@ -520,6 +523,19 @@ export class JourneysService {
     if (journey.driverId !== driverId) {
       throw new ForbiddenException('Esta jornada pertence a outro motorista.');
     }
+  }
+
+  /**
+   * Restringe a leitura ao dono quando o chamador nao tem escopo global.
+   *
+   * A permissao responde "voce pode ler jornadas"; o escopo responde "de
+   * quem". Sem esta checagem, `journeys:read:own` permitiria abrir a jornada
+   * de qualquer motorista so pelo id — escalada horizontal. `null` significa
+   * "sem restricao" (quem tem `journeys:read:all`).
+   */
+  private assertReadScope(journey: { driverId: string }, scopeDriverId: string | null): void {
+    if (scopeDriverId === null) return;
+    this.assertOwnership(journey, scopeDriverId);
   }
 }
 

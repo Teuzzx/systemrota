@@ -1,9 +1,31 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
+﻿import { Body, Controller, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsISO8601, IsOptional, IsString, MaxLength, Min } from 'class-validator';
-import { OccurrenceType, Permission } from '@rota/shared';
-import { CurrentUser, RequirePermissions } from '../../auth/guards';
+import { OccurrenceType, permissionsForRoles, Permission } from '@rota/shared';
+import {
+  CurrentUser, RequireAnyPermission, RequirePermissions, type AuthPrincipal,
+} from '../../auth/guards';
+
+/**
+ * Escopo de leitura de jornada.
+ *
+ * `null` = sem restricao: o chamador tem `journeys:read:all` (operacao).
+ * string = o driverId que a jornada precisa ter: o chamador so tem
+ * `journeys:read:own` e por isso so enxerga a propria jornada.
+ *
+ * Sem isto, a permissao responderia "pode ler jornadas" sem responder "de
+ * quem", e qualquer motorista abriria a jornada alheia pelo id.
+ */
+function readScope(user: AuthPrincipal): string | null {
+  const granted = new Set<Permission>([
+    ...permissionsForRoles(user.roles),
+    ...user.permissions,
+  ]);
+  if (granted.has(Permission.JOURNEYS_READ_ALL)) return null;
+  // Sem driverId associado, nada satisfaz a restricao — melhor que vazar.
+  return user.driverId ?? '';
+}
 import { JourneysService } from './journeys.service';
 
 class StartJourneyDto {
@@ -103,23 +125,23 @@ export class JourneysController {
   }
 
   @Get('journeys/:id')
-  @RequirePermissions(Permission.JOURNEYS_READ_OWN, Permission.JOURNEYS_READ_ALL)
-  summary(@Param('id') id: string) {
-    return this.journeys.summary(id);
+  @RequireAnyPermission(Permission.JOURNEYS_READ_OWN, Permission.JOURNEYS_READ_ALL)
+  summary(@Param('id') id: string, @CurrentUser() user: AuthPrincipal) {
+    return this.journeys.summary(id, readScope(user));
   }
 
   @Get('journeys/:id/breakdown')
-  @RequirePermissions(Permission.JOURNEYS_READ_OWN, Permission.JOURNEYS_READ_ALL)
+  @RequireAnyPermission(Permission.JOURNEYS_READ_OWN, Permission.JOURNEYS_READ_ALL)
   @ApiOperation({ summary: 'Linha do tempo com tempos separados e qualidade da medicao.' })
-  breakdown(@Param('id') id: string) {
-    return this.journeys.buildBreakdown(id);
+  breakdown(@Param('id') id: string, @CurrentUser() user: AuthPrincipal) {
+    return this.journeys.buildBreakdown(id, readScope(user));
   }
 
   @Get('journeys/:id/forecast')
-  @RequirePermissions(Permission.JOURNEYS_READ_OWN, Permission.JOURNEYS_READ_ALL)
+  @RequireAnyPermission(Permission.JOURNEYS_READ_OWN, Permission.JOURNEYS_READ_ALL)
   @ApiOperation({ summary: 'Previsao de conclusao (estimativa com nivel de confianca).' })
-  forecast(@Param('id') id: string) {
-    return this.journeys.forecast(id);
+  forecast(@Param('id') id: string, @CurrentUser() user: AuthPrincipal) {
+    return this.journeys.forecast(id, 900, readScope(user));
   }
 
   @Get('journeys')

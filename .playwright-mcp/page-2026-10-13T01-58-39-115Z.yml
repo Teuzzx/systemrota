@@ -1,0 +1,150 @@
+- generic [active] [ref=f5e1]:
+  - link "Pular para o conteudo" [ref=f5e2] [cursor=pointer]:
+    - /url: "#conteudo"
+  - generic [ref=f5e3]:
+    - complementary [ref=f5e4]:
+      - generic [ref=f5e5]:
+        - generic [ref=f5e6]: Rota
+        - generic [ref=f5e7]: Painel operacional
+      - navigation "Navegacao principal" [ref=f5e8]:
+        - generic [ref=f5e9]:
+          - generic [ref=f5e10]: Operacao
+          - list [ref=f5e11]:
+            - listitem [ref=f5e12]:
+              - link "Dashboard" [ref=f5e13] [cursor=pointer]:
+                - /url: /painel
+            - listitem [ref=f5e19]:
+              - link "Mapa operacional" [ref=f5e20] [cursor=pointer]:
+                - /url: /painel/mapa
+            - listitem [ref=f5e24]:
+              - link "Motoristas" [ref=f5e25] [cursor=pointer]:
+                - /url: /painel/motoristas
+        - generic [ref=f5e31]:
+          - generic [ref=f5e32]: Planejamento
+          - list [ref=f5e33]:
+            - listitem [ref=f5e34]:
+              - link "Rotas" [ref=f5e35] [cursor=pointer]:
+                - /url: /painel/rotas
+            - listitem [ref=f5e40]:
+              - link "Clientes" [ref=f5e41] [cursor=pointer]:
+                - /url: /painel/clientes
+        - generic [ref=f5e46]:
+          - generic [ref=f5e47]: Analise
+          - list [ref=f5e48]:
+            - listitem [ref=f5e49]:
+              - link "Historico de jornadas" [ref=f5e50] [cursor=pointer]:
+                - /url: /painel/jornadas
+            - listitem [ref=f5e54]:
+              - link "Alertas" [ref=f5e55] [cursor=pointer]:
+                - /url: /painel/alertas
+            - listitem [ref=f5e59]:
+              - link "Relatorios" [ref=f5e60] [cursor=pointer]:
+                - /url: /painel/relatorios
+      - generic [ref=f5e65]: Operacao de Picos · PI
+    - generic [ref=f5e66]:
+      - banner [ref=f5e67]:
+        - generic [ref=f5e68]:
+          - generic [ref=f5e69]: Administrador (DEMO)
+          - generic [ref=f5e70]: ADMINISTRADOR
+        - generic [ref=f5e71]:
+          - time [ref=f5e72]: 22:58:38
+          - generic [ref=f5e73]: AO VIVO
+          - button "Sair" [ref=f5e76] [cursor=pointer]
+      - main [ref=f5e81]:
+        - generic [ref=f5e82]:
+          - generic [ref=f5e83]:
+            - generic [ref=f5e84]:
+              - heading "Dashboard operacional" [level=1] [ref=f5e85]
+              - paragraph [ref=f5e86]: Indicadores calculados do banco de dados · atualizado 22:58:34
+            - button "Atualizar" [ref=f5e87] [cursor=pointer]
+          - generic [ref=f5e91]:
+            - strong [ref=f5e92]: "Atencao:"
+            - text: ha dados de demonstracao em exibicao (identificados como DEMO). Nao representam a operacao real.
+          - generic [ref=f5e93]:
+            - generic [ref=f5e95]:
+              - heading "Progresso do dia" [level=2] [ref=f5e96]
+              - paragraph [ref=f5e97]: Visitas concluidas sobre visitas planejadas
+            - generic [ref=f5e99]:
+              - generic [ref=f5e100]:
+                - generic [ref=f5e101]: Conclusao
+                - generic [ref=f5e102]: Sem dado suficiente para calcular.
+              - generic [ref=f5e103]:
+                - generic [ref=f5e104]: Frota em jornada
+                - generic [ref=f5e105]:
+                  - text: "1"
+                  - generic [ref=f5e106]: de 1 motoristas
+                - paragraph [ref=f5e107]: 1 com posicao atual · 0 desatualizada
+              - generic [ref=f5e108]:
+                - generic [ref=f5e109]: Rotas
+                - generic [ref=f5e110]: 3planejadas
+                - paragraph [ref=f5e111]: 1 em andamento · 0 concluidas
+          - region "Indicadores de frota e rotas" [ref=f5e112]:
+            - generic [ref=f5e113]:
+              - generic [ref=f5e114]: Motoristas cadastrados
+              - generic [ref=f5e115]: "1"
+              - generic [ref=f5e116]: 1 em jornada
+            - generic [ref=f5e117]:
+              - generic [ref=f5e118]: Com localizacao atual
+              - generic [ref=f5e119]: "1"
+              - generic [ref=f5e120]: 0 com dado desatualizado
+            - generic [ref=f5e121]:
+              - generic [ref=f5e122]: Rotas planejadas
+              - generic [ref=f5e123]: "3"
+              - generic [ref=f5e124]: 1 em andamento · 0 concluidas
+            - generic [ref=f5e125]:
+              - generic [ref=f5e126]: Alertas em aberto
+              - generic [ref=f5e127]: "0"
+              - generic [ref=f5e128]: 0 ocorrencias aguardando acompanhamento
+          - region "Progresso de visitas" [ref=f5e129]:
+            - generic [ref=f5e130]:
+              - generic [ref=f5e131]: Clientes planejados
+              - generic [ref=f5e132]: "0"
+              - generic [ref=f5e133]: 0 restantes
+            - generic [ref=f5e134]:
+              - generic [ref=f5e135]: Clientes atendidos
+              - generic [ref=f5e136]: "0"
+              - generic [ref=f5e137]: "-- de conclusao"
+            - generic [ref=f5e138]:
+              - generic [ref=f5e139]: Nao realizados
+              - generic [ref=f5e140]: "0"
+              - generic [ref=f5e141]: com justificativa registrada
+            - generic [ref=f5e142]:
+              - generic [ref=f5e143]: Distancia percorrida
+              - generic [ref=f5e144]: 2,5 km
+              - generic [ref=f5e145]: Distancia por GPS e estimativa, nao leitura de hodometro.
+          - region "Tempos e alertas" [ref=f5e146]:
+            - generic [ref=f5e147]:
+              - generic [ref=f5e149]:
+                - heading "Tempos de atendimento" [level=2] [ref=f5e150]
+                - paragraph [ref=f5e151]: Medidos a partir dos eventos registrados
+              - generic [ref=f5e153]:
+                - generic [ref=f5e154]:
+                  - term [ref=f5e155]: Tempo total em atendimento
+                  - definition [ref=f5e156]: 0s
+                - generic [ref=f5e157]:
+                  - term [ref=f5e158]: Tempo total em deslocamento
+                  - definition [ref=f5e159]: 0s
+                - generic [ref=f5e160]:
+                  - term [ref=f5e161]: Atendimento medio
+                  - definition [ref=f5e162]:
+                    - text: "--"
+                    - generic [ref=f5e163]: (0 amostras)
+                - generic [ref=f5e164]:
+                  - term [ref=f5e165]: Atendimento mediano
+                  - definition [ref=f5e166]: "--"
+            - generic [ref=f5e167]:
+              - generic [ref=f5e169]:
+                - heading "Posicoes mais recentes" [level=2] [ref=f5e170]
+                - paragraph [ref=f5e171]: Idade do dado e sempre exibida
+              - list [ref=f5e173]:
+                - listitem [ref=f5e174]:
+                  - generic [ref=f5e175]:
+                    - generic [ref=f5e176]: Motorista Demo (DEMO)
+                    - generic [ref=f5e177]: Rota R1 · ha 2 min
+                  - generic [ref=f5e178]: ATUAL
+          - generic [ref=f5e180]:
+            - generic [ref=f5e182]:
+              - heading "Alertas recentes" [level=2] [ref=f5e183]
+              - paragraph [ref=f5e184]: Somente alertas com dado verificavel
+            - paragraph [ref=f5e186]: Nenhum alerta registrado.
+  - alert [ref=f5e187]
