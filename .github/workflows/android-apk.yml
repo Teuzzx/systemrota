@@ -125,7 +125,23 @@ jobs:
 
       - name: Build APK debug
         working-directory: apps/android
-        run: gradle --no-daemon assembleDebug -PapiBaseUrl="${{ steps.url.outputs.apiBaseUrl }}"
+        env:
+          # Sem isso o Gradle tenta baixar da rede e falha em qualquer falha
+          # de conexao, mascarando o erro real do build.
+          GRADLE_OPTS: '-Dorg.gradle.internal.http.connectionTimeout=120000 -Dorg.gradle.internal.http.socketTimeout=120000'
+        run: |
+          echo "::group::log completo do Gradle"
+          gradle --no-daemon --stacktrace assembleDebug -PapiBaseUrl="${{ steps.url.outputs.apiBaseUrl }}" 2>&1 | tee /tmp/gradle-build.log
+          codigo=${PIPESTATUS[0]}
+          echo "::endgroup::"
+
+          # O log acima ja esta no stdout do job; aqui ficam so as linhas que
+          # explicam a falha, para nao precisar abrir o log completo.
+          echo "::group::linhas relevantes"
+          grep -nE "FAILURE|What went wrong|Could not|error:|Caused by|Unsupported|requires|incompatible|Execution failed|> " /tmp/gradle-build.log | head -40 || echo "(nenhuma linha de erro reconhecida)"
+          echo "::endgroup::"
+
+          exit $codigo
 
       - name: Confirmar que o APK foi gerado
         working-directory: apps/android
