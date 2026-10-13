@@ -1,0 +1,37 @@
+{
+  "name": "rota-logistica-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Plataforma integrada de gestao logistica: app Android para motoristas + painel web administrativo + backend NestJS/Prisma/PostgreSQL+PostGIS.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w @rota/shared",
+    "build:api": "npm run build -w @rota/api",
+    "build:web": "npm run build -w @rota/web",
+    "build": "npm run build:shared && npm run build:api && npm run build:web",
+    "typecheck": "npm run typecheck -w @rota/shared && npm run typecheck -w @rota/api && npm run typecheck -w @rota/web",
+    "lint": "npm run lint -w @rota/api && npm run lint -w @rota/web",
+    "test": "npm run test -w @rota/api && npm run test -w @rota/web",
+    "test:api": "npm run test -w @rota/api",
+    "test:web": "npm run test -w @rota/web",
+    "db:pglite": "npm run db:pglite -w @rota/api",
+    "db:generate": "npm run db:generate -w @rota/api",
+    "db:migrate": "npm run db:migrate -w @rota/api",
+    "db:seed:demo": "npm run db:seed:demo -w @rota/api",
+    "dev:api": "npm run dev -w @rota/api",
+    "dev:web": "npm run dev -w @rota/web",
+    "dev:local": "node scripts/dev-local.mjs",
+    "verify": "node scripts/verify.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

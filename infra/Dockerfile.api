@@ -1,0 +1,45 @@
+# Imagem da API (NestJS + Prisma).
+# Build multi-stage: compila o TypeScript e leva apenas o necessario.
+FROM node:22-bookworm-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json packages/shared/
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+RUN npm ci --workspace @rota/shared --workspace @rota/api --include-workspace-root
+
+FROM deps AS build
+COPY packages/shared packages/shared
+COPY apps/api apps/api
+RUN npm run build -w @rota/shared && npm run build -w @rota/api
+
+FROM node:22-bookworm-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+
+# curl para o healthcheck do container.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json packages/shared/
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+RUN npm ci --omit=dev --workspace @rota/shared --workspace @rota/api --include-workspace-root \
+ && npm cache clean --force
+
+COPY --from=build /app/packages/shared/dist packages/shared/dist
+COPY --from=build /app/apps/api/dist apps/api/dist
+COPY --from=build /app/apps/api/prisma apps/api/prisma
+COPY --from=build /app/node_modules/.prisma node_modules/.prisma
+
+WORKDIR /app/apps/api
+EXPOSE 4000
+
+# Migrations sao aplicadas por passo separado do-compose (ver DEPLOY.md),
+# para que uma falha nao derrube a API que ja estava no ar.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -fsS http://localhost:4000/api/docs-json || exit 1
+
+CMD ["node", "dist/main.js"]

@@ -1,0 +1,902 @@
+// ---------------------------------------------------------------------------
+// Plataforma de Gestao Logistica - modelo de dados
+// Alvo de producao: PostgreSQL 16 + PostGIS 3.4 (ver infra/docker-compose.yml)
+// Verificacao local: PGlite (PostgreSQL 18 WASM) + PostGIS, Mesmo schema,
+// mesmas migracoes, mesmas queries espaciais. Ver docs/ADR-0002.md
+//
+// Convencoes:
+//  - Todo registro operacional carrega `isDemo` para separar dados de
+//    demonstracao de dados reais (ver src/db/seed-demo.ts e banner da UI).
+//  - Colunas espaciais usam geography(Point,4326): metros, ordem correta para
+//    calculo de distancia. Indice GiST criado na migracao 0001.
+//  - Eventos recebidos do dispositivo sao append-only (JourneyEvent) e
+//    idempotentes por `clientEventId`.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================ ENUMS =========================================
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  PENDING_ACTIVATION
+}
+
+enum RoleKey {
+  ADMINISTRADOR
+  SUPERVISOR
+  MOTORISTA
+}
+
+enum DriverStatus {
+  ATIVO
+  INATIVO
+  FERIAS
+}
+
+enum CustomerStatus {
+  ATIVO
+  INATIVO
+  PENDENTE_REVISAO
+}
+
+enum GeocodeStatus {
+  VALIDADO
+  PENDENTE
+  INVALIDO
+  AUSENTE
+}
+
+enum ImportStatus {
+  UPLOADED
+  VALIDATING
+  VALIDATED
+  COMMITTED
+  FAILED
+  REVERTED
+}
+
+enum ImportSeverity {
+  ERRO
+  AVISO
+  INFO
+}
+
+enum RouteStatus {
+  PLANEJADA
+  ATRIBUIDA
+  PUBLICADA
+  EM_EXECUCAO
+  PAUSADA
+  CONCLUIDA
+  CANCELADA
+  ARQUIVADA
+}
+
+enum JourneyStatus {
+  EM_ANDAMENTO
+  PAUSADA
+  FINALIZADA
+  CANCELADA
+}
+
+enum VisitStatus {
+  PLANEJADA
+  EM_DESLOCAMENTO
+  CHEGADA_REGISTRADA
+  EM_ATENDIMENTO
+  CONCLUIDA
+  NAO_REALIZADA
+  CANCELADA
+}
+
+enum JourneyEventType {
+  JOURNEY_STARTED
+  JOURNEY_PAUSED
+  JOURNEY_RESUMED
+  JOURNEY_FINISHED
+  JOURNEY_CANCELLED
+  VISIT_ARRIVED
+  VISIT_SERVICE_STARTED
+  VISIT_SERVICE_ENDED
+  VISIT_NOT_DONE
+  VISIT_CANCELLED
+  OCCURRENCE_LOGGED
+  ROUTE_VERSION_CONFLICT
+}
+
+enum MeasurementQuality {
+  EXATA
+  ESTIMADA
+  INCOMPLETA
+}
+
+enum EventSource {
+  GPS
+  MANUAL
+}
+
+enum OccurrenceType {
+  ESTABELECIMENTO_FECHADO
+  CLIENTE_INDISPONIVEL
+  ENDERECO_INCORRETO
+  PROBLEMA_DE_ACESSO
+  PROBLEMA_OPERACIONAL
+  OUTRO
+}
+
+enum AlertSeverity {
+  INFO
+  AVISO
+  CRITICO
+}
+
+enum AlertStatus {
+  ABERTO
+  RECONHECIDO
+  RESOLVIDO
+  SILENCIADO
+}
+
+enum AlertAction {
+  CRIADO
+  ATUALIZADO
+  RECONHECIDO
+  RESOLVIDO
+  SILENCIADO
+  NOTIFICADO
+}
+
+enum OptimizationStatus {
+  EM_ANDAMENTO
+  CONCLUIDA
+  FALHOU
+}
+
+enum OptimizationAlgorithm {
+  NEAREST_NEIGHBOR_2OPT
+  MANUAL
+  IMPORTADO
+}
+
+enum Connectivity {
+  ONLINE
+  OFFLINE
+  DEGRADADO
+}
+
+enum FuelType {
+  GASOLINA
+  ETANOL
+  DIESEL
+  GNV
+  FLEX
+}
+
+// ============================ IDENTIDADE ====================================
+
+model User {
+  id                String            @id @default(uuid()) @db.Uuid
+  email             String            @unique @db.VarChar(180)
+  passwordHash      String            @db.VarChar(255)
+  name              String            @db.VarChar(160)
+  phone             String?           @db.VarChar(32)
+  status            UserStatus        @default(PENDING_ACTIVATION)
+  mustChangePassword Boolean          @default(false)
+  lastLoginAt       DateTime?
+  failedLoginCount  Int               @default(0)
+  lockedUntil       DateTime?
+  isDemo            Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  roles             UserRole[]
+  driver            Driver?
+  administrator     Administrator?
+  refreshTokens     RefreshToken[]
+  passwordResets    PasswordResetToken[]
+  auditLogs         AuditLog[]
+  supervisedScopes  SupervisorScope[] @relation("ScopeSupervisor")
+  settingsUpdated   SystemSetting[]   @relation("SettingUpdater")
+
+  @@index([status])
+  @@map("users")
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  key         RoleKey          @unique
+  name        String           @db.VarChar(80)
+  description String?          @db.VarChar(255)
+  createdAt   DateTime         @default(now())
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  key         String           @unique @db.VarChar(80)
+  description String?          @db.VarChar(255)
+  createdAt   DateTime         @default(now())
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId    String   @db.Uuid
+  roleId    String   @db.Uuid
+  grantedAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Driver {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @unique @db.Uuid
+  code           String?      @unique @db.VarChar(40)
+  status         DriverStatus @default(ATIVO)
+  homeCity       String?      @db.VarChar(120)
+  homeNeighborhood String?    @db.VarChar(120)
+  homeLatitude   Float?
+  homeLongitude  Float?
+  licenseNumber  String?      @db.VarChar(60)
+  notes          String?      @db.Text
+  isDemo         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  routes              Route[]
+  journeys            Journey[]
+  visits              Visit[]
+  locationPoints      LocationPoint[]
+  occurrences         Occurrence[]
+  alerts              Alert[]
+  vehicleAssignments  VehicleAssignment[]
+  supervisorScopes    SupervisorScope[]
+  optimizationRuns    RouteOptimizationRun[]
+
+  @@index([status])
+  @@map("drivers")
+}
+
+model Administrator {
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @unique @db.Uuid
+  department           String?  @db.VarChar(120)
+  canManageSettings    Boolean  @default(false)
+  isDemo               Boolean  @default(false)
+  createdAt            DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("administrators")
+}
+
+model SupervisorScope {
+  id            String  @id @default(uuid()) @db.Uuid
+  supervisorId  String  @db.Uuid
+  driverId      String? @db.Uuid
+  city          String? @db.VarChar(120)
+  neighborhood  String? @db.VarChar(120)
+  createdAt     DateTime @default(now())
+
+  supervisor User   @relation("ScopeSupervisor", fields: [supervisorId], references: [id], onDelete: Cascade)
+  driver     Driver? @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([supervisorId])
+  @@index([driverId])
+  @@map("supervisor_scopes")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  tokenHash  String   @unique @db.VarChar(128)
+  familyId   String   @db.Uuid
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  userAgent  String?  @db.VarChar(255)
+  ip         String?  @db.VarChar(64)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  tokenHash  String   @unique @db.VarChar(128)
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ============================ FROTA =========================================
+
+model Vehicle {
+  id                String    @id @default(uuid()) @db.Uuid
+  plate             String    @unique @db.VarChar(16)
+  model             String?   @db.VarChar(80)
+  year              Int?
+  fuelType          FuelType?
+  tankCapacityL     Float?
+  avgConsumptionKmpl Float?
+  fuelCostPerLiter  Float?
+  odometerKm        Float?
+  active            Boolean   @default(true)
+  isDemo            Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  assignments VehicleAssignment[]
+
+  @@map("vehicles")
+}
+
+model VehicleAssignment {
+  id              String    @id @default(uuid()) @db.Uuid
+  vehicleId       String    @db.Uuid
+  driverId        String    @db.Uuid
+  startAt         DateTime  @default(now())
+  endAt           DateTime?
+  odometerStartKm Float?
+  odometerEndKm   Float?
+  notes           String?   @db.Text
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  driver  Driver  @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([driverId, startAt])
+  @@index([vehicleId])
+  @@map("vehicle_assignments")
+}
+
+// ============================ CLIENTES =====================================
+
+model Customer {
+  id                 String        @id @default(uuid()) @db.Uuid
+  /// Identificador no sistema comercial legado (Max Planck). Null quando o
+  /// cadastro foi criado manualmente pelo administrador.
+  externalId         String?       @db.VarChar(80)
+  sourceSystem       String        @default("MANUAL") @db.VarChar(40)
+  tradeName          String        @db.VarChar(200)
+  contactName        String?       @db.VarChar(160)
+  phone              String?       @db.VarChar(32)
+  email              String?       @db.VarChar(180)
+  addressLine        String?       @db.VarChar(255)
+  neighborhood       String?       @db.VarChar(120)
+  city               String        @db.VarChar(120)
+  state              String        @default("PI") @db.Char(2)
+  zipCode            String?       @db.VarChar(12)
+  latitude           Float?
+  longitude          Float?
+  /// Coluna PostGIS populada por trigger/SQL quando lat/lng sao validos.
+  location           Unsupported("geography(Point, 4326)")?
+  geocodeStatus      GeocodeStatus @default(AUSENTE)
+  status             CustomerStatus @default(ATIVO)
+  notes              String?       @db.Text
+  openingHours       String?       @db.VarChar(255)
+  defaultServiceS    Int?          /// tempo medio de atendimento configurado (s)
+  priority           Int           @default(5)
+  lastVisitAt        DateTime?
+  nextPlannedVisitAt DateTime?
+  isDemo             Boolean       @default(false)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  importBatch     CustomerImport?  @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  importBatchId   String?          @db.Uuid
+
+  routeStops      RouteStop[]
+  visits          Visit[]
+  journeys        Journey[]
+  occurrences     Occurrence[]
+  alerts          Alert[]
+
+  @@unique([sourceSystem, externalId])
+  @@index([city, neighborhood])
+  @@index([status])
+  @@index([geocodeStatus])
+  @@index([tradeName])
+  @@index([lastVisitAt])
+  @@map("customers")
+}
+
+model CustomerImport {
+  id             String       @id @default(uuid()) @db.Uuid
+  fileName       String       @db.VarChar(255)
+  fileSizeBytes  Int
+  fileChecksum   String       @db.VarChar(128)
+  format         String       @db.VarChar(16)
+  /// Chave de idempotencia: mesmo arquivo reenviado nao duplica clientes.
+  idempotencyKey String       @unique @db.VarChar(128)
+  status         ImportStatus @default(UPLOADED)
+  mapping        Json?
+  totalRows      Int          @default(0)
+  insertedCount  Int          @default(0)
+  updatedCount   Int          @default(0)
+  skippedCount   Int          @default(0)
+  errorCount     Int          @default(0)
+  isDemo         Boolean      @default(false)
+  uploadedById   String?      @db.Uuid
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  errors    CustomerImportError[]
+  customers Customer[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("customer_imports")
+}
+
+model CustomerImportError {
+  id        String          @id @default(uuid()) @db.Uuid
+  importId  String          @db.Uuid
+  rowNumber Int
+  column    String?         @db.VarChar(120)
+  rawValue  String?         @db.Text
+  message   String          @db.VarChar(500)
+  severity  ImportSeverity  @default(ERRO)
+  createdAt DateTime        @default(now())
+
+  import CustomerImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([importId, severity])
+  @@map("customer_import_errors")
+}
+
+// ============================ ROTAS =========================================
+
+model Route {
+  id                 String      @id @default(uuid()) @db.Uuid
+  /// Codigo operacional (R1..R4 e outros). Registro administravel, nunca fixo
+  /// no codigo: R1-R4 sao apenas as rotas iniciais da operacao.
+  code               String      @unique @db.VarChar(40)
+  name               String      @db.VarChar(160)
+  description        String?     @db.Text
+  region             String?     @db.VarChar(160)
+  cities             String[]
+  neighborhoods      String[]
+  driverId           String?     @db.Uuid
+  plannedDate        DateTime    @db.Date
+  status             RouteStatus @default(PLANEJADA)
+  currentVersion     Int         @default(1)
+  plannedStartAt     DateTime?
+  plannedEndAt       DateTime?
+  returnToBase       Boolean     @default(false)
+  distanceEstimatedM Float?
+  durationEstimatedS Int?
+  serviceEstimatedS  Int?
+  publishedAt        DateTime?
+  startedAt          DateTime?
+  endedAt            DateTime?
+  isDemo             Boolean     @default(false)
+  createdById        String?     @db.Uuid
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  driver           Driver?               @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  versions         RouteVersion[]
+  stops            RouteStop[]
+  journeys         Journey[]
+  alerts           Alert[]
+  optimizationRuns RouteOptimizationRun[]
+
+  @@index([plannedDate, status])
+  @@index([driverId, plannedDate])
+  @@map("routes")
+}
+
+model RouteVersion {
+  id               String      @id @default(uuid()) @db.Uuid
+  routeId          String      @db.Uuid
+  version          Int
+  status           RouteStatus
+  totalDistanceM   Float?
+  totalDurationS   Int?
+  totalServiceS    Int?
+  totalStops       Int
+  changeNote       String?     @db.Text
+  /// Diff contra a versao anterior: { adicionados, removidos, reordenados }
+  diff             Json?
+  changedById      String?     @db.Uuid
+  createdAt        DateTime    @default(now())
+
+  route Route      @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  stops RouteStop[]
+
+  @@unique([routeId, version])
+  @@map("route_versions")
+}
+
+model RouteStop {
+  id                 String   @id @default(uuid()) @db.Uuid
+  routeId            String   @db.Uuid
+  routeVersionId     String   @db.Uuid
+  customerId         String   @db.Uuid
+  sequence           Int
+  priority           Int      @default(5)
+  plannedArrivalAt   DateTime?
+  plannedDepartureAt DateTime?
+  estTravelFromPrevS Int?
+  estDistanceFromPrevM Float?
+  estServiceS        Int?
+  timeWindowStart    DateTime?
+  timeWindowEnd      DateTime?
+  /// Parada fixada manualmente pelo administrador; otimizador nao reordena.
+  pinned             Boolean  @default(false)
+  note               String?  @db.VarChar(500)
+  isDemo             Boolean  @default(false)
+
+  route        Route        @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  routeVersion RouteVersion @relation(fields: [routeVersionId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  visits       Visit[]
+
+  @@unique([routeVersionId, sequence])
+  @@index([routeId, sequence])
+  @@index([customerId])
+  @@map("route_stops")
+}
+
+// ============================ JORNADAS E VISITAS ============================
+
+model Journey {
+  id              String        @id @default(uuid()) @db.Uuid
+  driverId        String        @db.Uuid
+  routeId         String?       @db.Uuid
+  routeVersionId  String?       @db.Uuid
+  /// Versao da rota conhecida pelo dispositivo no momento do inicio. Permite
+  /// detectar conflito quando o admin altera a rota durante o offline.
+  routeVersionAtStart Int?
+  status          JourneyStatus @default(EM_ANDAMENTO)
+  startedAt       DateTime
+  endedAt         DateTime?
+  pauseTotalS     Int           @default(0)
+  travelTotalS    Int           @default(0)
+  serviceTotalS   Int           @default(0)
+  unclassifiedS   Int           @default(0)
+  distanceTraveledM Float       @default(0)
+  /// Distancia acumulada por GPS (medicao, sujeita a ruido filtrado).
+  gpsDistanceM    Float         @default(0)
+  odometerStartKm Float?
+  odometerEndKm   Float?
+  estimatedFuelL  Float?
+  estimatedFuelCost Float?
+  stopsPlanned    Int           @default(0)
+  stopsConcluded  Int           @default(0)
+  stopsNotDone    Int           @default(0)
+  isDemo          Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  driver         Driver          @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  route          Route?          @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  customer       Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerId     String?         @db.Uuid
+  events         JourneyEvent[]
+  visits         Visit[]
+  locationPoints LocationPoint[]
+  occurrences    Occurrence[]
+  alerts         Alert[]
+
+  @@index([driverId, startedAt])
+  @@index([status, startedAt])
+  @@index([routeId])
+  @@map("journeys")
+}
+
+model Visit {
+  id                    String            @id @default(uuid()) @db.Uuid
+  journeyId             String            @db.Uuid
+  routeStopId           String?           @db.Uuid
+  customerId            String            @db.Uuid
+  driverId              String            @db.Uuid
+  sequence              Int
+  status                VisitStatus       @default(PLANEJADA)
+  plannedArrivalAt      DateTime?
+  arrivedAt             DateTime?
+  serviceStartedAt      DateTime?
+  serviceEndedAt        DateTime?
+  /// serviceEndedAt - serviceStartedAt
+  serviceDurationS      Int?
+  /// serviceStartedAt - arrivedAt
+  waitDurationS         Int?
+  /// chegada - saida do cliente anterior
+  travelDurationS       Int?
+  travelQuality         MeasurementQuality @default(INCOMPLETA)
+  distanceFromPrevM     Float?
+  notDoneReason         String?           @db.VarChar(80)
+  notDoneNote           String?           @db.Text
+  source                EventSource       @default(MANUAL)
+  manualJustification   String?           @db.Text
+  confirmedByGeofence   Boolean           @default(false)
+  isDemo                Boolean           @default(false)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  journey   Journey    @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  routeStop RouteStop? @relation(fields: [routeStopId], references: [id], onDelete: SetNull)
+  customer  Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  driver    Driver     @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  occurrences Occurrence[]
+
+  @@unique([journeyId, sequence])
+  @@index([customerId, arrivedAt])
+  @@index([driverId, status])
+  @@index([journeyId, status])
+  @@map("visits")
+}
+
+model JourneyEvent {
+  id          String          @id @default(uuid()) @db.Uuid
+  journeyId   String          @db.Uuid
+  driverId    String          @db.Uuid
+  /// UUID gerado no dispositivo. Chave de idempotencia: reenvio do mesmo
+  /// evento e reconhecido como duplicado e contabilizado uma unica vez.
+  clientEventId String        @unique @db.VarChar(80)
+  sequenceNo  Int
+  type        JourneyEventType
+  /// Timestamp do dispositivo (captura).
+  capturedAt  DateTime
+  /// Timestamp do servidor (recebimento). Permite medir atraso de rede.
+  receivedAt  DateTime        @default(now())
+  payload     Json?
+  latitude    Float?
+  longitude   Float?
+  accuracyM   Float?
+  isDuplicate Boolean         @default(false)
+  duplicateOfId String?       @db.Uuid
+  rejected    Boolean         @default(false)
+  rejectionReason String?     @db.VarChar(255)
+
+  journey Journey @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  @@index([journeyId, capturedAt])
+  @@index([driverId, capturedAt])
+  @@index([type])
+  @@map("journey_events")
+}
+
+// ============================ GEOLOCALIZACAO ===============================
+
+model LocationPoint {
+  id            String        @id @default(uuid()) @db.Uuid
+  journeyId     String        @db.Uuid
+  driverId      String        @db.Uuid
+  clientPointId String        @unique @db.VarChar(80)
+  sequenceNo    Int
+  latitude      Float
+  longitude     Float
+  /// Coluna PostGIS espelhada de latitude/longitude, com indice GiST.
+  location      Unsupported("geography(Point, 4326)")?
+  accuracyM     Float
+  speedMps      Float?
+  bearingDeg    Float?
+  connectivity  Connectivity  @default(ONLINE)
+  batteryPct    Int?
+  /// Timestamp do dispositivo.
+  capturedAt    DateTime
+  /// Timestamp do servidor.
+  receivedAt    DateTime      @default(now())
+  isSimulated   Boolean       @default(false)
+  /// Politica de retencao: calculada na ingestao.
+  retainedUntil DateTime
+  isDemo        Boolean       @default(false)
+
+  journey Journey @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  driver  Driver  @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([journeyId, capturedAt])
+  @@index([driverId, capturedAt])
+  @@index([retainedUntil])
+  @@map("location_points")
+}
+
+/// Agregacao horavel preservada por mais tempo que os pontos brutos.
+model LocationHourAggregate {
+  id           String   @id @default(uuid()) @db.Uuid
+  driverId     String   @db.Uuid
+  bucketStart  DateTime
+  pointCount    Int
+  distanceM    Float
+  movingS      Int
+  stationaryS  Int
+  avgLatitude  Float
+  avgLongitude Float
+  createdAt    DateTime @default(now())
+
+  @@unique([driverId, bucketStart])
+  @@index([bucketStart])
+  @@map("location_hour_aggregates")
+}
+
+// ============================ OPERACAO ======================================
+
+model Occurrence {
+  id               String         @id @default(uuid()) @db.Uuid
+  journeyId        String         @db.Uuid
+  visitId          String?        @db.Uuid
+  driverId         String         @db.Uuid
+  customerId       String?        @db.Uuid
+  type             OccurrenceType
+  description      String?        @db.Text
+  requiresFollowUp Boolean        @default(false)
+  resolvedAt       DateTime?
+  resolvedById     String?        @db.Uuid
+  isDemo           Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+
+  journey Journey @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  visit   Visit?  @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  driver  Driver  @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([journeyId])
+  @@index([requiresFollowUp, resolvedAt])
+  @@map("occurrences")
+}
+
+model Alert {
+  id               String        @id @default(uuid()) @db.Uuid
+  ruleKey          String        @db.VarChar(60)
+  severity         AlertSeverity @default(AVISO)
+  status           AlertStatus   @default(ABERTO)
+  title            String        @db.VarChar(200)
+  message          String        @db.VarChar(600)
+  /// Contexto verificavel (ultima posicao, horario limite, limiar aplicado).
+  context          Json?
+  driverId         String?       @db.Uuid
+  journeyId        String?       @db.Uuid
+  routeId          String?       @db.Uuid
+  customerId       String?       @db.Uuid
+  /// Chave de deduplicacao: impede alertas repetidos do mesmo fenomeno.
+  dedupeKey        String        @db.VarChar(160)
+  occurrences      Int           @default(1)
+  firstSeenAt      DateTime      @default(now())
+  lastSeenAt       DateTime      @default(now())
+  acknowledgedAt   DateTime?
+  acknowledgedById String?       @db.Uuid
+  resolvedAt       DateTime?
+  resolvedById     String?       @db.Uuid
+  silencedUntil    DateTime?
+
+  driver  Driver?  @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  journey Journey? @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  route   Route?   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  history AlertHistory[]
+
+  @@unique([dedupeKey])
+  @@index([status, severity])
+  @@index([firstSeenAt])
+  @@map("alerts")
+}
+
+model AlertHistory {
+  id        String       @id @default(uuid()) @db.Uuid
+  alertId   String       @db.Uuid
+  action    AlertAction
+  actorId   String?      @db.Uuid
+  detail    Json?
+  createdAt DateTime     @default(now())
+
+  alert Alert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId, createdAt])
+  @@map("alert_history")
+}
+
+model RouteOptimizationRun {
+  id                String               @id @default(uuid()) @db.Uuid
+  routeId           String?              @db.Uuid
+  routeVersionId    String?              @db.Uuid
+  provider          String               @db.VarChar(40)
+  algorithm         OptimizationAlgorithm @default(NEAREST_NEIGHBOR_2OPT)
+  status            OptimizationStatus   @default(EM_ANDAMENTO)
+  originLatitude    Float?
+  originLongitude   Float?
+  destinationLatitude  Float?
+  destinationLongitude Float?
+  returnToBase      Boolean              @default(false)
+  inputCount        Int                  @default(0)
+  includedCount     Int                  @default(0)
+  excludedCount     Int                  @default(0)
+  totalDistanceM    Float?
+  totalDurationS    Int?
+  totalServiceS     Int?
+  /// Resultado: [{ customerId, sequence, distanceM, durationS, reason? }]
+  result            Json?
+  excluded          Json?
+  constraints       Json?
+  diffFromPrevious Json?
+  confidenceNote    String?              @db.VarChar(500)
+  errorMessage      String?              @db.Text
+  driverId          String?              @db.Uuid
+  requestedById     String?              @db.Uuid
+  isDemo            Boolean              @default(false)
+  startedAt         DateTime             @default(now())
+  finishedAt        DateTime?
+
+  route  Route?  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  driver Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([routeId, startedAt])
+  @@map("route_optimization_runs")
+}
+
+// ============================ PLATAFORMA ====================================
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  actorEmail String?  @db.VarChar(180)
+  actorRole  String?  @db.VarChar(40)
+  action     String   @db.VarChar(120)
+  entity     String   @db.VarChar(80)
+  entityId   String?  @db.VarChar(120)
+  before     Json?
+  after      Json?
+  ip         String?  @db.VarChar(64)
+  userAgent  String?  @db.VarChar(255)
+  requestId  String?  @db.VarChar(80)
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  key         String   @id @db.VarChar(120)
+  value       Json
+  description String?  @db.VarChar(400)
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  updatedBy User? @relation("SettingUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("system_settings")
+}

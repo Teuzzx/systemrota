@@ -1,0 +1,80 @@
+version: '3.9'
+
+# Implantacao reproduzivel de PRODUCAO.
+#
+# ATENCAO: o ambiente de VERIFICACAO local nao depende deste arquivo.
+# Os testes rodam em Node puro com PGlite (PostgreSQL em WASM + PostGIS),
+# usando as MESMAS migracoes e o MESMO schema. Ver docs/ADR-0002.md.
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: rota-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rota
+      POSTGRES_USER: ${POSTGRES_USER:-rota}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - rota-db-data:/var/lib/postgresql/data
+    ports:
+      - '127.0.0.1:5432:5432'   # Exposto so na maquina local; nunca na rede publica.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-rota} -d rota']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.api
+    container_name: rota-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DB_DRIVER: postgresql
+      DB_TRANSPORT: engine
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rota}:${POSTGRES_PASSWORD}@db:5432/rota?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?defina JWT_ACCESS_SECRET no .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      ROUTING_PROVIDER: ${ROUTING_PROVIDER:-heuristic}
+      OSRM_BASE_URL: ${OSRM_BASE_URL:-}
+      LOCATION_RETENTION_DAYS: ${LOCATION_RETENTION_DAYS:-90}
+    expose:
+      - '4000'
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+    container_name: rota-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '3000:3000'
+
+  # Roteamento por rede viaria (OSRM) - OPCIONAL.
+  # Ative com `docker compose --profile routing up -d` e defina
+  # ROUTING_PROVIDER=osrm e OSRM_BASE_URL=http://routing:5000.
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:v5.27.1
+    container_name: rota-osrm
+    profiles: ['routing']
+    restart: unless-stopped
+    volumes:
+      # Dados de rota devem ser baixados uma vez (ver docs/DEPLOY.md).
+      - osrm-data:/opt
+    ports:
+      - '127.0.0.1:5000:5000'
+
+volumes:
+  rota-db-data:
+  osrm-data:

@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Tokens do DESIGN_DNA.md. Tema escuro e o padrao do painel de operacao.
+ */
+:root {
+  --bg-base: #0e1116;
+  --bg-surface: #151a21;
+  --bg-raised: #1c222b;
+  --border-subtle: #242b36;
+  --border-strong: #39424f;
+
+  --text-primary: #e6eaf0;
+  --text-secondary: #98a2b3;
+  --text-muted: #5f6b7a;
+  --text-inverse: #0e1116;
+
+  --status-ok: #2fa36b;
+  --status-ok-dim: #1b3d2c;
+  --status-progress: #3d7be8;
+  --status-progress-dim: #16294a;
+  --status-warn: #d99a2b;
+  --status-warn-dim: #3d3016;
+  --status-critical: #d6494b;
+  --status-critical-dim: #3d1a1c;
+  --status-neutral: #5f6b7a;
+  --status-neutral-dim: #1c222b;
+
+  --accent: #5ac8d6;
+  --accent-dim: #123038;
+}
+
+* {
+  border-color: var(--border-subtle);
+}
+
+html,
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Todo numero usa mono com digitos tabulares (colunas alinham sozinhas). */
+.tabular {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Respeita quem pediu menos movimento. Nao ha animacao decorativa. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
