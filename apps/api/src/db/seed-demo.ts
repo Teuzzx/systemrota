@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Carga de DEMONSTRACAO.
  *
  * REGRA INEGOCIAVEL: tudo que este script cria e DEMO.
@@ -9,12 +9,16 @@
  *
  * Nenhum destes dados representa a operacao real.
  */
+import { loadEnv } from '../config/load-env';
 import { PrismaClient, DriverStatus, CustomerStatus, RoleKey } from '@prisma/client';
 import { hashPassword } from '../auth/password';
 import { loadConfig } from '../config/configuration';
 import { startPglite, stopPglite, defaultDataDir, isPgliteRunning } from './pglite';
 import { seedCore } from './seed-core';
 import { CustomersService } from '../modules/customers/customers.service';
+
+// O .env preenche o que o ambiente nao fornecer; o ambiente sempre vence.
+loadEnv();
 
 const DEMO_EMAIL_DOMAIN = 'demo.rota.invalid'; // .invalid nunca resolve: e obviamente demo
 

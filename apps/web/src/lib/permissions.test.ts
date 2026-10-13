@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { can, grantedPermissions, NAV_ITEMS, visibleNavItems } from './permissions';
+import {
+  can, grantedPermissions, groupNav, NAV_GROUPS, NAV_ITEMS, visibleNavItems,
+} from './permissions';
 import type { RoleKey } from './types';
 
 describe('Permissoes por perfil', () => {
@@ -41,5 +43,43 @@ describe('Permissoes por perfil', () => {
   it('nenhum perfil recebe permissao de outro por acidente', () => {
     expect(can(['SUPERVISOR'], [], 'locations:read:all')).toBe(false);
     expect(can(['MOTORISTA'], [], 'alerts:manage')).toBe(false);
+  });
+});
+
+describe('Agrupamento da navegacao', () => {
+  it('todo item pertence a um grupo declarado', () => {
+    const ids = NAV_GROUPS.map((g) => g.id);
+    for (const item of NAV_ITEMS) {
+      expect(ids).toContain(item.group);
+    }
+  });
+
+  it('todo item declara um icone', () => {
+    for (const item of NAV_ITEMS) {
+      expect(item.icon).toBeTruthy();
+    }
+  });
+
+  it('mantem a ordem dos grupos e nao repete item', () => {
+    const items = visibleNavItems(['ADMINISTRADOR']);
+    const groups = groupNav(items);
+    expect(groups.map((g) => g.id)).toEqual(['operacao', 'planejamento', 'analise']);
+    const flattened = groups.flatMap((g) => g.items.map((i) => i.href));
+    expect(flattened).toHaveLength(items.length);
+    expect(new Set(flattened).size).toBe(flattened.length);
+  });
+
+  it('remove grupos sem itens visiveis', () => {
+    // Um cabecalho vazio ocupa espaco e sugere conteudo inexistente.
+    const groups = groupNav(visibleNavItems(['MOTORISTA']));
+    expect(groups).toHaveLength(0);
+  });
+
+  it('agrupa apenas o que o perfil pode ver', () => {
+    const items = visibleNavItems(['SUPERVISOR']);
+    const flattened = groupNav(items).flatMap((g) => g.items.map((i) => i.href));
+    expect(flattened).toContain('/painel');
+    // SUPERVISOR nao tem locations:read:all.
+    expect(flattened).not.toContain('/painel/mapa');
   });
 });

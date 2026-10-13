@@ -43,6 +43,20 @@ function prismaCli() {
   return found;
 }
 
+/**
+ * No npm workspaces as dependencias ficam hoisted na raiz. Procurar apenas em
+ * apps/api/node_modules quebra o seed com MODULE_NOT_FOUND.
+ */
+function tsNodeBin() {
+  const candidates = [
+    join(ROOT, 'node_modules', 'ts-node', 'dist', 'bin.js'),
+    join(API, 'node_modules', 'ts-node', 'dist', 'bin.js'),
+  ];
+  const found = candidates.find((p) => existsSync(p));
+  if (!found) throw new Error('ts-node nao encontrado. Rode `npm install` na raiz.');
+  return found;
+}
+
 function runNode(args, cwd = ROOT) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, { cwd, env, stdio: 'inherit' });
@@ -83,7 +97,7 @@ async function main() {
 
   console.log('> 3/4 aplicando carga de demonstracao (tudo marcado como DEMO)...');
   try {
-    await runNode([join(API, 'node_modules', 'ts-node', 'dist', 'bin.js'), '-T', 'src/db/seed-demo.ts'], API);
+    await runNode([tsNodeBin(), '-T', 'src/db/seed-demo.ts'], API);
   } catch {
     console.warn('   Seed demo falhou (pode ja existir). Seguindo sem seed.');
   }

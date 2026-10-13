@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { AlertRow, DashboardOverview, DriverPosition } from '@/lib/types';
 import {
-  Banner, ErrorBlock, LoadingBlock, MetricTile, Panel, StatusBadge,
+  Banner, ErrorBlock, LoadingBlock, MetricTile, Panel, ProgressBar, StatusBadge,
 } from '@/components/ui';
+import { IconRefresh } from '@/components/icons';
 import {
   formatDataAge, formatDistance, formatDuration, formatPercent, severityTone,
 } from '@/lib/format';
@@ -55,13 +56,25 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex items-center justify-between gap-4">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-body font-semibold text-ink">Dashboard operacional</h1>
           <p className="text-table text-ink-secondary">
-            Gerado em {new Date(overview.generatedAt).toLocaleTimeString('pt-BR')} · indicadores calculados do banco de dados
+            Indicadores calculados do banco de dados · atualizado{' '}
+            <span className="tabular">
+              {new Date(overview.generatedAt).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+            </span>
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => void load()}
+          disabled={loading}
+          className="flex items-center gap-2 rounded-sm border border-border-strong bg-raised px-3 py-2 text-body font-semibold text-ink transition-colors duration-DEFAULT hover:border-accent hover:text-accent disabled:opacity-50"
+        >
+          <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </button>
       </header>
 
       {hasDemo ? (
@@ -71,6 +84,36 @@ export default function DashboardPage() {
       ) : null}
 
       {error ? <Banner tone="critical">Falha na atualizacao: {error}</Banner> : null}
+
+      <Panel title="Progresso do dia" description="Visitas concluidas sobre visitas planejadas">
+        <div className="grid grid-cols-1 md:grid-cols-3">
+          <ProgressBar
+            pct={overview.visits.completionPct}
+            label="Conclusao"
+            detail={`${overview.visits.concluded} de ${overview.visits.planned} concluidas`}
+          />
+          <div className="border-t border-border-subtle px-4 py-3 md:border-l md:border-t-0">
+            <div className="text-label font-semibold uppercase text-ink-secondary">Frota em jornada</div>
+            <div className="mt-2 text-body text-ink">
+              <span className="tabular text-metric font-semibold text-ink">{overview.drivers.inJourney}</span>
+              <span className="ml-2 text-table text-ink-secondary">de {overview.drivers.total} motoristas</span>
+            </div>
+            <p className="mt-1 text-table text-ink-muted">
+              {overview.drivers.withFreshLocation} com posicao atual · {overview.drivers.withStaleLocation} desatualizada
+            </p>
+          </div>
+          <div className="border-t border-border-subtle px-4 py-3 md:border-l md:border-t-0">
+            <div className="text-label font-semibold uppercase text-ink-secondary">Rotas</div>
+            <div className="mt-2 text-body text-ink">
+              <span className="tabular text-metric font-semibold text-ink">{overview.routes.planned}</span>
+              <span className="ml-2 text-table text-ink-secondary">planejadas</span>
+            </div>
+            <p className="mt-1 text-table text-ink-muted">
+              {overview.routes.inProgress} em andamento · {overview.routes.concluded} concluidas
+            </p>
+          </div>
+        </div>
+      </Panel>
 
       <section aria-label="Indicadores de frota e rotas" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricTile

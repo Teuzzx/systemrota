@@ -1,14 +1,18 @@
-/**
+﻿/**
  * Cria um administrador inicial. Executar uma unica vez, manualmente.
  *
  *   node dist/db/create-admin-cli.js --email admin@empresa.com --name "Nome"
  *
  * Nao cria dados ficticios: exige e-mail e senhaisdigitada explicitamente.
  */
+import { loadEnv } from '../config/load-env';
 import { PrismaClient, RoleKey } from '@prisma/client';
 import { hashPassword, checkPasswordPolicy } from '../auth/password';
 import { seedCore } from './seed-core';
 import { loadConfig } from '../config/configuration';
+
+// O .env preenche o que o ambiente nao fornecer; o ambiente sempre vence.
+loadEnv();
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);

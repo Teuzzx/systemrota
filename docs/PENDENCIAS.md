@@ -38,6 +38,19 @@ ambiente; Android recebe a URL por `buildConfigField`.
 **Necessário do cliente:** domínio/subdomínio, decisão de hospedagem
 (h VPS gerenciada, nuvem, on-premise) e quem opera.
 
+> **Meio resolvido em 2026-10-13 — o banco já não é pendência.** O
+> PostgreSQL/PostGIS foi implantado e validado num projeto Supabase próprio
+> (`sa-east-1`, PostgreSQL 17.11 + PostGIS 3.3.7), com role dedicado e menor
+> privilégio. Passos exatos em [DEPLOY.md](DEPLOY.md) seção 0 e em
+> [ADR-0005](ADR-0005-migracao-postgres-gerenciado.md).
+>
+> O que continua aberto é **onde a API roda**. Supabase não hospeda servidor
+> Node contínuo (WebSocket + Prisma), então a API precisa de Railway, Fly.io,
+> Render ou uma VPS. O painel pode ir para a Vercel — mas **sozinho ele não
+> funciona**: o painel faz proxy de `/api` para `API_INTERNAL_URL`, então sem a
+> API no ar todas as telas dão erro. São 3 serviços, não 1:
+> Vercel (painel) + hospedagem Node (API) + Supabase (banco, já feito).
+
 ## P-04 · Assinatura do APK
 **Bloqueia:** build de release e atualizações futuras.
 **Motivo:** Android exige que updates de APK tenham **a mesma chave de
@@ -105,12 +118,16 @@ manual por link, e quem aprova cada versão.
 
 ## Pendências técnicas (não dependem do cliente, mas do ambiente)
 
-- **T-01 · Validar contra PostgreSQL real.** A suíte roda com PGlite
-  (PostgreSQL em WASM) usando o mesmo schema e as mesmas migrações. Ainda não
-  foi executada contra um PostgreSQL 16 nativo — Docker e `psql` não existem
-  neste ambiente. **Recomendação:** rodar `npm run verify` e depois
-  `docker compose up` + `npm run test -w @rota/api` no primeiro ambiente com
-  Docker disponível.
+- **T-01 · Validar contra PostgreSQL real.** ~~A migração não rodava em Postgres
+  gerenciado~~ — **RESOLVIDO em parte (2026-10-13)**: a migração foi aplicada e
+  validada em um Supabase real (PostgreSQL 17.11 + PostGIS 3.3.7): 31 tabelas,
+  21 enums, 97 índices, GiST e `ST_DWithin` conferidos. Isso revelou e corrigiu
+  um bug de portabilidade (`CREATE SCHEMA "public"`), documentado em
+  [ADR-0005](ADR-0005-migracao-postgres-gerenciado.md).
+  **Ainda pendente:** a *suíte de testes* continua rodando contra PGlite (por
+  isolamento), ou seja, o CI não pega regressão de portabilidade sozinho.
+  Recomendação: rodar `npm run test -w @rota/api` com `DATABASE_URL` apontando
+  para o Supabase antes de cada release.
 - **T-02 · Compilar e testar o app Android.** Não há JDK nem Android SDK
   neste ambiente. O código e os testes JVM unitários estão escritos, mas
   **não foram compilados nem executados**. Ver `docs/ANDROID.md`.

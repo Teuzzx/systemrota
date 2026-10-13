@@ -2,11 +2,13 @@
 -- (prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma)
 --
 -- PostGIS e obrigatorio: as colunas geography(Point,4326) dependem dele.
+-- Em Postgres gerenciado (Supabase, RDS, Cloud SQL) criar extensao exige
+-- superusuario: habilite postgis e pg_trgm ANTES de rodar esta migracao.
+-- Com as extensoes ja ativas, o IF NOT EXISTS vira no-op e nao exige privilegio.
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
 
 -- CreateEnum
 CREATE TYPE "UserStatus" AS ENUM ('ACTIVE', 'BLOCKED', 'PENDING_ACTIVATION');

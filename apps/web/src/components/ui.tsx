@@ -181,6 +181,108 @@ export function LoadingBlock({ label = 'Carregando dados do servidor' }: { label
   );
 }
 
+/**
+ * Esqueleto de carregamento.
+ * A forma imita a linha final do dado, evitando salto de layout quando o
+ * conteudo chega. `aria-hidden`: quem anuncia o carregamento e o rotulo acima.
+ */
+export function Skeleton({ className = '' }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={`animate-pulse rounded-sm bg-raised ${className}`}
+      style={{ animationDuration: '1400ms' }}
+    />
+  );
+}
+
+export function SkeletonRows({ rows = 4, label }: { rows?: number; label: string }) {
+  return (
+    <div className="flex flex-col gap-2 p-4">
+      <span className="sr-only" role="status">{label}</span>
+      {Array.from({ length: rows }, (_, i) => (
+        <Skeleton key={i} className="h-8 w-full" />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Barra de progresso de conclusao.
+ *
+ * Regra dura: quando nao ha dado (`null`) a barra NAO e desenhada. O operador
+ * precisa distinguir "0%" de "ainda nao sei" — um zero sem contexto e enganoso.
+ */
+export function ProgressBar({
+  pct, label, detail,
+}: { pct: number | null | undefined; label: string; detail?: string }) {
+  const known = pct !== null && pct !== undefined && Number.isFinite(pct);
+  if (!known) {
+    return (
+      <div className="px-4 py-3">
+        <div className="text-label font-semibold uppercase text-ink-secondary">{label}</div>
+        <div className="mt-2 text-table text-ink-muted">Sem dado suficiente para calcular.</div>
+      </div>
+    );
+  }
+  const clamped = Math.min(100, Math.max(0, pct));
+  const bar = clamped >= 80 ? 'bg-status-ok'
+    : clamped >= 40 ? 'bg-status-progress'
+      : clamped > 0 ? 'bg-status-warn'
+        : 'bg-status-neutral';
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-label font-semibold uppercase text-ink-secondary">{label}</span>
+        <span className="tabular text-body font-semibold text-ink">
+          {clamped.toFixed(0).replace('.', ',')}%
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuenow={Math.round(clamped)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={label}
+        className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-raised"
+      >
+        <div className={`h-full rounded-full ${bar}`} style={{ width: `${clamped}%` }} />
+      </div>
+      {detail ? <p className="mt-1 text-table text-ink-muted">{detail}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Estado de conexao do painel.
+ * Distingue "parou" de "ainda nao ha jornada" — os dois estados sao diferentes
+ * para quem despacha rota.
+ */
+export function ConnectionPill({
+  state, lastUpdatedLabel,
+}: { state: 'conectado' | 'reconectando' | 'offline'; lastUpdatedLabel?: string }) {
+  const config = {
+    conectado: { text: 'AO VIVO', tone: 'ok' as Tone },
+    reconectando: { text: 'RECONECTANDO', tone: 'warn' as Tone },
+    offline: { text: 'SEM CONEXAO', tone: 'critical' as Tone },
+  }[state];
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-sm border border-border-subtle px-2 py-1 ${TONE_CLASS[config.tone]}`}
+      title={lastUpdatedLabel ? `Ultima atualizacao: ${lastUpdatedLabel}` : undefined}
+    >
+      <span
+        aria-hidden
+        className={`h-1.5 w-1.5 rounded-full bg-current ${state === 'reconectando' ? 'animate-pulse' : ''}`}
+      />
+      <span className="text-label font-semibold uppercase">{config.text}</span>
+      {lastUpdatedLabel ? (
+        <span aria-hidden className="tabular text-label opacity-70">· {lastUpdatedLabel}</span>
+      ) : null}
+    </span>
+  );
+}
+
 export function ErrorBlock({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div className="m-4 rounded-sm border border-status-critical bg-status-critical-dim px-4 py-3">

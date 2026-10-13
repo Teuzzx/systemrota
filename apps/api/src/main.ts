@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { loadEnv } from './config/load-env';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -8,6 +9,10 @@ import rateLimit from 'express-rate-limit';
 import { AppModule } from './app.module';
 import { APP_CONFIG, AppConfig } from './config/configuration';
 import { PrismaService } from './common/prisma.service';
+
+// Antes de qualquer leitura de configuracao: o .env preenche o que o
+// ambiente nao fournir. Valores do ambiente sempre tem precedencia.
+loadEnv();
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');

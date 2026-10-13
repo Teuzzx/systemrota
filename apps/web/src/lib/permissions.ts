@@ -4,16 +4,35 @@
  */
 import type { RoleKey } from './types';
 
-export const NAV_ITEMS = [
-  { href: '/painel', label: 'Dashboard', permission: 'journeys:read:all' },
-  { href: '/painel/mapa', label: 'Mapa operacional', permission: 'locations:read:all' },
-  { href: '/painel/motoristas', label: 'Motoristas', permission: 'drivers:read' },
-  { href: '/painel/rotas', label: 'Rotas', permission: 'routes:read' },
-  { href: '/painel/clientes', label: 'Clientes', permission: 'customers:read' },
-  { href: '/painel/jornadas', label: 'Historico de jornadas', permission: 'journeys:read:all' },
-  { href: '/painel/alertas', label: 'Alertas', permission: 'alerts:read' },
-  { href: '/painel/relatorios', label: 'Relatorios', permission: 'reports:read' },
+/**
+ * Itens de navegacao, agrupados pela frequencia de uso na operacao.
+ * O agrupamento importa: quem despacha rota precisa ver "quem esta em
+ * jornada" e "onde ele esta" sem passar pelas telas de cadastro.
+ *
+ * `icon` e a chave do componente em components/icons.tsx (nao o componente
+ * direto) para manter este arquivo livre de JSX.
+ */
+export const NAV_GROUPS = [
+  { id: 'operacao', label: 'Operacao' },
+  { id: 'planejamento', label: 'Planejamento' },
+  { id: 'analise', label: 'Analise' },
 ] as const;
+
+export type NavGroupId = (typeof NAV_GROUPS)[number]['id'];
+
+export const NAV_ITEMS = [
+  { href: '/painel', label: 'Dashboard', group: 'operacao', icon: 'gauge', permission: 'journeys:read:all' },
+  { href: '/painel/mapa', label: 'Mapa operacional', group: 'operacao', icon: 'map', permission: 'locations:read:all' },
+  { href: '/painel/motoristas', label: 'Motoristas', group: 'operacao', icon: 'users', permission: 'drivers:read' },
+  { href: '/painel/rotas', label: 'Rotas', group: 'planejamento', icon: 'route', permission: 'routes:read' },
+  { href: '/painel/clientes', label: 'Clientes', group: 'planejamento', icon: 'store', permission: 'customers:read' },
+  { href: '/painel/jornadas', label: 'Historico de jornadas', group: 'analise', icon: 'clock', permission: 'journeys:read:all' },
+  { href: '/painel/alertas', label: 'Alertas', group: 'analise', icon: 'bell', permission: 'alerts:read' },
+  { href: '/painel/relatorios', label: 'Relatorios', group: 'analise', icon: 'chart', permission: 'reports:read' },
+] as const;
+
+export type NavItem = (typeof NAV_ITEMS)[number];
+export type NavIconName = NavItem['icon'];
 
 const MATRIX: Record<RoleKey, readonly string[]> = {
   ADMINISTRADOR: [
@@ -52,6 +71,19 @@ export function visibleNavItems(
   permissions: readonly string[] = [],
 ): typeof NAV_ITEMS[number][] {
   return NAV_ITEMS.filter((item) => can(roles, permissions, item.permission));
+}
+
+/**
+ * Agrupa os itens visiveis pela ordem de NAV_GROUPS.
+ * Grupos sem itens visiveis saem da lista — um cabecalho vazio so ocupa espaco.
+ */
+export function groupNav(
+  items: readonly (typeof NAV_ITEMS)[number][],
+): Array<{ id: NavGroupId; label: string; items: (typeof NAV_ITEMS)[number][] }> {
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    items: items.filter((item) => item.group === group.id),
+  })).filter((group) => group.items.length > 0);
 }
 
 export function isDemoDataset(roles: readonly RoleKey[]): boolean {

@@ -49,10 +49,35 @@ const HEAD = `-- Migracao inicial gerada por scripts/generate-migration.mjs
 -- (prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma)
 --
 -- PostGIS e obrigatorio: as colunas geography(Point,4326) dependem dele.
+-- Em Postgres gerenciado (Supabase, RDS, Cloud SQL) criar extensao exige
+-- superusuario: habilite postgis e pg_trgm ANTES de rodar esta migracao.
+-- Com as extensoes ja ativas, o IF NOT EXISTS vira no-op e nao exige privilegio.
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 `;
+
+/**
+ * Remove o "CREATE SCHEMA IF NOT EXISTS \\"public\\"" emitido pelo prisma.
+ *
+ * O schema public ja existe por padrao em todo Postgres, entao a instrucao e
+ * redundante — e pior que isso: o Postgres executa a verificacao de ACL do
+ * schema ANTES de decidir que pode pular a criacao. Em bancos gerenciados o
+ * schema public e propriedade de pg_database_owner (o dono do banco), nao do
+ * role da aplicacao, e a migracao inteira aborta com:
+ *     ERROR: permission denied for database <db>   (SQLSTATE 42501)
+ * O IF NOT EXISTS nao protege contra isso.
+ *
+ * Ver ADR-0005.
+ */
+const body = raw
+  .replace(/^\s*CREATE SCHEMA\s+(IF NOT EXISTS\s+)?"[^"]+"\s*;\s*$/gim, '')
+  .trimEnd();
+
+if (/^\s*CREATE SCHEMA\b/im.test(body)) {
+  console.error('Geracao abortada: sobrou CREATE SCHEMA na migracao (ver ADR-0005).');
+  process.exit(1);
+}
 
 const TAIL = `
 -- ====================== INDICES ESPACIAIS (GiST) ======================
@@ -73,11 +98,13 @@ CREATE INDEX "customers_trade_name_trgm"
 `;
 
 mkdirSync(migrationDir, { recursive: true });
-const sql = HEAD + raw.trimEnd() + TAIL;
+const sql = HEAD + body + TAIL;
 writeFileSync(migrationFile, sql, 'utf8');
 
 const bytes = Buffer.from(sql, 'utf8');
 const hasBom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
 console.log(`Migracao gerada: ${migrationFile}`);
 console.log(`Bytes: ${bytes.length} | BOM: ${hasBom ? 'PRESENTE (ERRO)' : 'ausente (ok)'}`);
+console.log(`CREATE SCHEMA removido: ${/^\s*CREATE SCHEMA\b/im.test(sql) ? 'NAO (ERRO)' : 'sim (ok)'}`);
 if (hasBom) process.exit(1);
+if (/^\s*CREATE SCHEMA\b/im.test(sql)) process.exit(1);
