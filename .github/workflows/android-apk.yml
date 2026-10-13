@@ -1,0 +1,117 @@
+name: APK Android
+
+# Gera o APK do app do motorista e publica como artefato para download.
+#
+# Por que buildar no CI e nao localmente: a maquina de desenvolvimento nao tem
+# JDK nem Android SDK, e instalar o toolchain Android baixa alguns GB. O CI
+# faz isso em minutos, sem custo em repositorio publico, e produz um artefato
+# versionado junto do codigo.
+#
+# Assinatura: build DEBUG, assinada com o keystore de debug que o proprio
+# Gradle gera. E instalavel em aparelho real, mas serve so para teste — cada
+# reinstalacao gera assinatura diferente. Para distribuicao continua ver a
+# pendencia P-04 em docs/PENDENCIAS.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/android/**'
+      - 'packages/shared/**'
+      - '.github/workflows/android-apk.yml'
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: 'URL da API gravada no APK (https obrigatorio — o app recusa HTTP)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: Build APK debug
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Habilitar Gradle caching
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            apps/android/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('apps/android/**/*.kts') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      # O Gradle Wrapper nao e versionado: ele depende do gradle-wrapper.jar,
+      # um binario que so pode ser produzido pelo proprio Gradle. Versionar um
+      # gradlew sem o jar seria um script quebrado — pior que nao existir.
+      # No CI o Gradle e baixado direto e a versao fica fixada aqui, num lugar
+      # legivel.
+      - name: Instalar Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Instalar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Aceitar licencas do SDK
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" > /dev/null
+
+      # O APK nao carrega segredo nenhum: a URL da API entra por -P e vira
+      # BuildConfig. Nada de KEY no repositorio.
+      - name: Definir URL da API
+        id: url
+        run: |
+          URL="${{ inputs.api_base_url }}"
+          if [ -z "$URL" ]; then
+            URL="https://api.exemplo.invalid"
+          fi
+          echo "apiBaseUrl=$URL" >> "$GITHUB_OUTPUT"
+          echo "URL usada: $URL"
+
+      - name: Testes unitarios JVM
+        working-directory: apps/android
+        run: gradle --no-daemon testDebugUnitTest
+
+      - name: Build APK debug
+        working-directory: apps/android
+        run: gradle --no-daemon assembleDebug -PapiBaseUrl="${{ steps.url.outputs.apiBaseUrl }}"
+
+      - name: Publicar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: sistema-rota-apk-debug
+          path: apps/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # Build de release fica bloqueada de proposito: sem keystore do cliente,
+      # gerar um APK release daria a falsa impressao de que ha distribuicao.
+      # O que trava e o segredo de assinatura, nao o script.
+      - name: Resumo
+        run: |
+          {
+            echo "### APK pronto"
+            echo ""
+            echo "Baixe o artefato **sistema-rota-apk-debug** desta execucao."
+            echo ""
+            echo "Instalar no aparelho:Settings > Sobre > Build number (toque 7x)"
+            echo "para liberar instalacao de fonte desconhecida, depois abra o .apk."
+            echo ""
+            echo "**Este APK e de TESTE**: assinado com chave de debug. Para"
+            echo "distribuir a frotta, veja a pendencia P-04 em docs/PENDENCIAS.md."
+          } >> "$GITHUB_STEP_SUMMARY"
