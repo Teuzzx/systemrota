@@ -1,0 +1,62 @@
+# Contexto de build do Docker.
+#
+# Sem este arquivo o daemon envia o diretorio INTEIRO ao daemon de build.
+# So `node_modules` aqui ja sao ~920 MB: o build ficaria lentissimo ou estouraria
+# o limite da hospedagem (Railway/Fly) antes de comecar a compilar.
+#
+# Regra: o Dockerfile copia apenas package.json, package-lock.json,
+# packages/shared e apps/api. Tudo que nao e necessario a imagem fica de fora.
+
+# Dependencias e artefatos de build
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+build
+**/build
+coverage
+**/coverage
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Segredos — NUNCA enviar para o contexto.
+# O Dockerfile nao copia .env; mesmo assim, bloquear aqui evita Exposicao
+# acidental em camadas ou no cache de build.
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+*.pem
+*.key
+*.jks
+*.keystore
+keystore.properties
+
+# Git e metadados
+.git
+.gitignore
+.gitattributes
+
+# Banco local de verificacao (PGlite em disco)
+.pglite
+**/.pglite
+
+# Android: nao participa da imagem da API nem da web.
+# Build do APK e feito separado (precisa do Android SDK).
+apps/android
+
+# Documentacao e tooling nao vao na imagem de runtime
+docs
+*.md
+scripts
+infra
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+logs/
+.tmp/

@@ -35,11 +35,15 @@ COPY --from=build /app/apps/api/prisma apps/api/prisma
 COPY --from=build /app/node_modules/.prisma node_modules/.prisma
 
 WORKDIR /app/apps/api
+
+# Railway/Fly injetam PORT dinamicamente (often 8080). Forma shell para o
+# healthcheck expandir a variavel; a API tambem le PORT do ambiente
+# (ver apps/api/src/config/configuration.ts).
 EXPOSE 4000
 
-# Migrations sao aplicadas por passo separado do-compose (ver DEPLOY.md),
-# para que uma falha nao derrube a API que ja estava no ar.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -fsS http://localhost:4000/api/docs-json || exit 1
+# Migrations sao aplicadas por passo separado (ver DEPLOY.md), para que uma
+# falha nao derrube uma API que ja estava no ar.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -fsS "http://localhost:${PORT:-4000}/api/docs-json" || exit 1
 
 CMD ["node", "dist/main.js"]

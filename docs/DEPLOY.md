@@ -90,6 +90,86 @@ restrita a administrador — agende em cron/job.
 
 ---
 
+## 0.5 · Publicar a API (Railway)
+
+A Vercel não executa servidor Node contínuo, então a API (NestJS + WebSocket)
+precisa de um host próprio. Railway é o caminho mais direto, e o `railway.json`
+do repositório já aponta para o Dockerfile certo.
+
+**No painel do Railway → New Project → Deploy from GitHub → `Teuzzx/systemrota`:**
+
+1. **Settings → Config**
+   - **Dockerfile Path:** `infra/Dockerfile.api` (o `railway.json` já declara isso)
+   - **Root Directory:** deixe vazio — o build precisa da raiz do monorepo
+   - **Healthcheck Path:** `/api/docs-json`
+
+2. **Variáveis de ambiente** (obrigatórias):
+
+   | Variável | Valor |
+   |---|---|
+   | `NODE_ENV` | `production` |
+   | `DATABASE_URL` | `postgresql://rota_app:<senha>@db.<ref>.supabase.co:5432/postgres?sslmode=require` |
+   | `JWT_ACCESS_SECRET` | `openssl rand -base64 48` (**mín. 32 caracteres**) |
+   | `CORS_ORIGINS` | a URL do painel na Vercel, ex.: `https://seuapp.vercel.app` |
+   | `ROUTING_PROVIDER` | `heuristic` |
+
+   O `.env` **não** é enviado à Railway (está no `.dockerignore`); cada variável
+   é digitada no painel. `JWT_ACCESS_SECRET` com menos de 32 caracteres, ou igual
+   ao valor de desenvolvimento, **faz o boot falhar de propósito**.
+
+3. Não defina `PORT`: a Railway injeta e a API já lê do ambiente.
+
+4. Concluído, o Railway devolve algo como `https://sistema-rota-api.up.railway.app`.
+   **Guarde essa URL** — é o valor de `API_INTERNAL_URL` da Vercel.
+
+> **Migrations continuam sendo passo separado**, por decisão de projeto: uma
+> migration quebrada não pode derrubar uma API em serviço. O schema do Supabase
+> já foi aplicado e validado (seção 0). Para mudanças futuras, rode
+> `npm run db:migrate` da sua máquina com o `DATABASE_URL` do Supabase, ou
+> adicione um job de release no CI — **não** no start do container.
+
+## 0.6 · Publicar o painel (Vercel)
+
+1. [vercel.com/new](https://vercel.com/new) → importe `Teuzzx/systemrota`.
+
+2. **Configure o monorepo:**
+
+   | Campo | Valor |
+   |---|---|
+   | **Framework Preset** | Next.js |
+   | **Root Directory** | `apps/web` |
+   | **Install Command** | `cd ../.. && npm ci && npm run build -w @rota/shared && npm run build -w @rota/web` |
+
+   O `Root Directory` muda o contexto de build: o painel depende de
+   `@rota/shared`, que vive na raiz do monorepo.
+
+3. **Variáveis de ambiente:**
+
+   | Variável | Valor |
+   |---|---|
+   | `API_INTERNAL_URL` | `https://sua-api.up.railway.app` |
+   | `NEXT_PUBLIC_API_URL` | **vazio** — para o painel usar o proxy interno `/api` |
+
+   `NEXT_PUBLIC_API_URL` preenchido faz o navegador chamar a API direto, e o CORS
+   deixa de passar pelo servidor.
+
+4. Deploy. A Vercel devolve `https://seuapp.vercel.app`.
+
+5. Volte ao Railway, ajuste `CORS_ORIGINS` com a URL final da Vercel e redeploy.
+
+### Conferindo se os três serviços estão ligados
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://sua-api.up.railway.app/api/docs-json
+curl -i https://seuapp.vercel.app/api/dashboard/overview
+```
+
+Um **401** em `/api/dashboard/overview` vindo do domínio da Vercel é o sinal de
+que painel → API está correto: a rota existe e exige autenticação.
+Um **502/504** significa `API_INTERNAL_URL` errado ou API fora do ar.
+
+---
+
 ## 1. Preparação (Docker)
 
 ```bash
