@@ -1,0 +1,5 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- Cor de fundo do icone adaptativo. Ver res/drawable/ic_launcher_foreground.xml. -->
+<resources>
+    <color name="ic_launcher_background">#0F172A</color>
+</resources>
