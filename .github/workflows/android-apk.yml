@@ -55,13 +55,15 @@ jobs:
 
       # O Gradle Wrapper nao e versionado: ele depende do gradle-wrapper.jar,
       # um binario que so pode ser produzido pelo proprio Gradle. Versionar um
-      # gradlew sem o jar seria um script quebrado — pior que nao existir.
-      # No CI o Gradle e baixado direto e a versao fica fixada aqui, num lugar
-      # legivel.
-      - name: Instalar Gradle 8.7
+      # Gradle 8.7 nao e compativel com o AGP 8.7.3 do projeto: o plugin exige
+      # 8.9 ou superior e aborta na configuracao, com mensagem que nao aponta a
+      # causa. Por isso a versao fica fixada aqui, num lugar legivel — o Gradle
+      # Wrapper nao e versionado (depende do gradle-wrapper.jar, binario
+      # produzido apenas pelo proprio Gradle).
+      - name: Instalar Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.11.1'
 
       # Sequencia manual do SDK. A acao android-actions/setup-android falhou na
       # primeira execucao, entao o SDK passa a ser instalado aqui, de forma
