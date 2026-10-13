@@ -22,10 +22,14 @@ generator client {
   //   "Prisma Client could not locate the Query Engine for runtime
   //    debian-openssl-3.0.x ... generated for debian-openssl-1.1.x"
   //
-  // `native` cobre desenvolvimento em qualquer SO; debian-openssl-3.0.x e o
-  // runtime da imagem node:22-bookworm-slim (Debian 12, OpenSSL 3). Declarar
-  // ambos torna o build reproduzivel, independente de onde foi gerado.
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  // Os tres alvos sao deliberados:
+  //   native            desenvolvimento em qualquer SO, inclusive Windows;
+  //   debian-openssl-3.0.x   imagem x86_64 (node:22-bookworm-slim, Railway);
+  //   linux-arm64-openssl-3.0.x  Oracle Cloud Always Free (Ampere A1), que e ARM.
+  //
+  // Declarar todos deixa a MESMA imagem funcionar nas duas arquiteturas, sem
+  // rebuild por plataforma. Gerar e sempre explicito no Dockerfile.
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
 }
 
 datasource db {

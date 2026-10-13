@@ -170,6 +170,94 @@ Um **502/504** significa `API_INTERNAL_URL` errado ou API fora do ar.
 
 ---
 
+## 0.7 · Oracle Cloud Always Free (VM ARM64)
+
+Única opção **grátis permanente** que não expira e não dorme por inatividade.
+O Always Free dá 4 núcleos Ampere A1 e até 24 GB de RAM somando as instâncias,
+mais 200 GB de disco.
+
+> ⚠️ **Antes de criar: a capacidade do Always Free costuma esgotar.** A maioria
+> das regiões devolve *"Out of capacity"* ao tentar criar a VM ARM. Não é erro
+> seu — é escassez do plano gratuito. Se acontecer: tente outra região, use o
+> shape `VM.Standard.A1.Flex` com 2 OCPUs (o menor possível) e volte depois.
+> Muita gente regrada e consegue em horas ou dias.
+
+### 0.7.1 Criar a VM
+
+1. [cloud.oracle.com/free](https://cloud.oracle.com/free) — criar conta
+   (pede cartão para verificação; cobra ~US$ 1 e estorna)
+2. **Create instance** → Shape **VM.Standard.A1.Flex** (ARM64)
+   - OCPUs: 2 · RAM: 12 GB
+   - Image: **Canonical Ubuntu 24.04**
+   - Networking: criar VCN com 0.0.0.0/0 e **adicionar chave pública de SSH**
+3. Abrir a porta **4000** (TCP): `Networking → Virtual Cloud Networks → sua VCN
+   → Security Lists → Default → Add Ingress Rule`, source `0.0.0.0/0`, TCP,
+   dest port `4000`. Só essa — a 22 do SSH já vem liberada.
+
+### 0.7.2 Instalar Docker e subir
+
+```bash
+ssh -i ~/.ssh/sua-chave ubuntu@<ip-publica>
+
+sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2
+sudo usermod -aG docker $USER && newgrp docker
+
+git clone https://github.com/Teuzzx/systemrota.git
+cd systemrota
+cp .env.example .env
+nano .env          # cole DATABASE_URL, JWT_ACCESS_SECRET, CORS_ORIGINS
+
+./scripts/deploy-vm.sh
+```
+
+> **Arquitetura:** a VM é ARM64. O `schema.prisma` já declara
+> `linux-arm64-openssl-3.0.x` entre os `binaryTargets`, então o mesmo build
+> serve ARM64 e x86_64, sem etapa extra. Se o log reclamar de *"could not locate
+> the Query Engine"*, o build usou cache antigo:
+> `docker compose -f infra/docker-compose.vm.yml build --no-cache api`
+
+O `deploy-vm.sh` valida o `.env` (inclusive o segredo de 32+ caracteres),
+constrói, sobe e **espera a API responder** antes de dizer que deu certo. Se
+faltou variável, ele para dizendo qual — em vez de deixar um container em
+restart-loop com erro genérico.
+
+### 0.7.3 Conferir de fora
+
+```bash
+curl http://<ip-publica>:4000/api/docs-json
+```
+
+Se responder local e não de fora, é a Security List ou o iptables:
+
+```bash
+sudo iptables -I INPUT -p tcp --dport 4000 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+Depois use `http://<ip>:4000` como `API_INTERNAL_URL` na Vercel. Funciona porque
+o painel fala com a API pelo proxy do Next (servidor → servidor); o navegador
+nunca chama a API diretamente.
+
+### 0.7.4 HTTPS antes de usar com motoristas
+
+O app Android tem `usesCleartextTraffic="false"` e **recusa HTTP**. Com IP e
+porta expostos, isso bloqueia o APK.
+
+| Opção | Custo | Como |
+|---|---|---|
+| Cloudflare Tunnel | grátis | HTTPS sem abrir porta; some quando a VM desliga |
+| domínio + Let's Encrypt | ~US$ 10/ano | endereço estável e legível |
+
+É a pendência P-03 e depende da decisão do cliente.
+
+### 0.7.5 Atualizar depois
+
+```bash
+cd ~/systemrota && git pull && ./scripts/deploy-vm.sh
+```
+
+---
+
 ## 1. Preparação (Docker)
 
 ```bash
