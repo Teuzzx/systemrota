@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Cliente HTTP da API.
  *
  * Regras:
@@ -25,7 +25,19 @@ export class ApiError extends Error implements ApiErrorShape {
   }
 }
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api';
+/**
+ * Prefixo das chamadas a API.
+ *
+ * `||` e obrigatorio, nao `??`. Variavel de ambiente declarada como vazia na
+ * Vercel chega aqui como string '' â€” e `'' ?? '/api'` devolve '' (o `??` so
+ * trata null/undefined). O resultado era o navegador pedir `/auth/me` em vez
+ * de `/api/auth/me`: o proxy nao casava e a tela mostrava "Falha na
+ * comunicacao com a API (HTTP 404)", servindo o HTML 404 da Vercel.
+ *
+ * Vazio significa "usar o proxy interno", que e o comportamento desejado
+ * quando NEXT_PUBLIC_API_URL fica em branco.
+ */
+const BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 let accessToken: string | null = null;
 let refreshing: Promise<boolean> | null = null;
