@@ -36,3 +36,6 @@ Thumbs.db
 # cloudflared.exe tem 52 MB: versionar isso no GitHub estouraria o limite
 # recomendado e nao tem qualquer valor para o projeto.
 .tools/
+
+# Artefatos de navegador do agente (screenshots/snapshots de verificacao)
+.playwright-mcp/
