@@ -31,3 +31,8 @@ logs/
 .tmp/
 .DS_Store
 Thumbs.db
+
+# Ferramentas locais baixadas (cloudflared, binarios avulsos).
+# cloudflared.exe tem 52 MB: versionar isso no GitHub estouraria o limite
+# recomendado e nao tem qualquer valor para o projeto.
+.tools/
