@@ -63,13 +63,34 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      # Sequencia manual do SDK. A acao android-actions/setup-android falhou na
+      # primeira execucao, entao o SDK passa a ser instalado aqui, de forma
+      # explicita e versionada no proprio workflow.
+      #
+      # cmdline-tools vai em /usr/local/lib/android/sdk porque o script de
+      # instalacao do runner procura o sdkmanager nessa posicao (ANDROID_SDK_ROOT).
       - name: Instalar Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Aceitar licencas do SDK
         run: |
+          set -euo pipefail
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+
+          echo "Baixando command line tools..."
+          curl -fsSL -o /tmp/cmdline-tools.zip \
+            https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline
+          # O zip traz cmdline-tools/; o SDK exige o layout <sdk>/cmdline-tools/latest/
+          mv /tmp/cmdline/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"
+
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          echo "sdkmanager: $(command -v sdkmanager)"
+
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" > /dev/null
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+          echo "Instalado:"
+          sdkmanager --list_installed 2>/dev/null | head -20
 
       # O APK nao carrega segredo nenhum: a URL da API entra por -P e vira
       # BuildConfig. Nada de KEY no repositorio.
@@ -90,6 +111,19 @@ jobs:
       - name: Build APK debug
         working-directory: apps/android
         run: gradle --no-daemon assembleDebug -PapiBaseUrl="${{ steps.url.outputs.apiBaseUrl }}"
+
+      - name: Confirmar que o APK foi gerado
+        working-directory: apps/android
+        run: |
+          APK=$(find . -name '*-debug.apk' | head -1)
+          if [ -z "$APK" ]; then
+            echo "::error::nenhum .apk encontrado — o build nao produziu artefato"
+            exit 1
+          fi
+          echo "APK: $APK ($(du -h "$APK" | cut -f1))"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" 2>/dev/null \
+            | grep -E "^package|sdkVersion|application-label" | head -5 \
+            || echo "(aapt2 indisponivel; apenas o arquivo importa para o artefato)"
 
       - name: Publicar artefato
         uses: actions/upload-artifact@v4
