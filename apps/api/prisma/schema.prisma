@@ -15,6 +15,17 @@
 
 generator client {
   provider = "prisma-client-js"
+
+  // binaryTargets explicito. Sem isto, `native` e resolvido na maquina que roda
+  // `prisma generate` — e a imagem so copia o binario gerado. Gerar no Windows
+  // e rodar em Debian 12 quebrava o boot da API com:
+  //   "Prisma Client could not locate the Query Engine for runtime
+  //    debian-openssl-3.0.x ... generated for debian-openssl-1.1.x"
+  //
+  // `native` cobre desenvolvimento em qualquer SO; debian-openssl-3.0.x e o
+  // runtime da imagem node:22-bookworm-slim (Debian 12, OpenSSL 3). Declarar
+  // ambos torna o build reproduzivel, independente de onde foi gerado.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

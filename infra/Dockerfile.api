@@ -11,7 +11,13 @@ RUN npm ci --workspace @rota/shared --workspace @rota/api --include-workspace-ro
 FROM deps AS build
 COPY packages/shared packages/shared
 COPY apps/api apps/api
-RUN npm run build -w @rota/shared && npm run build -w @rota/api
+# Gera o Prisma Client DENTRO da imagem. Depender so do prebuild do npm torna a
+# geracao implicita e ja falhou no deploy: o `npm ci` do estagio deps dispara o
+# postinstall do @prisma/client antes do schema.prisma estar na imagem, e o
+# client gerado nao serve ao runtime de Debian 12. Aqui o schema ja existe.
+RUN npx prisma generate --schema apps/api/prisma/schema.prisma \
+ && npm run build -w @rota/shared \
+ && npm run build -w @rota/api
 
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
