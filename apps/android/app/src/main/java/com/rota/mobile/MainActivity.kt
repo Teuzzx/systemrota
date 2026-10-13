@@ -6,10 +6,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.rota.mobile.ui.HomeViewModel
 import com.rota.mobile.ui.RotaApp
+import com.rota.mobile.ui.appViewModelFactory
 import com.rota.mobile.ui.theme.RotaTheme
 
 class MainActivity : ComponentActivity() {
@@ -20,7 +23,10 @@ class MainActivity : ComponentActivity() {
         viewModel.onLocationPermissionResult(granted[Manifest.permission.ACCESS_FINE_LOCATION] == true)
     }
 
-    private val viewModel by lazy { com.rota.mobile.ui.appViewModel() }
+    // appViewModelFactory e uma factory comum, nao uma funcao @Composable.
+    // O launcher de permissao vive como propriedade e dispara FORA da composicao,
+    // onde nao se pode chamar composable — o compilador recusava.
+    private val viewModel: HomeViewModel by viewModels { appViewModelFactory }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

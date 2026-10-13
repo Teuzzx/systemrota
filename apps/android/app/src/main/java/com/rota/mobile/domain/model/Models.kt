@@ -8,7 +8,7 @@ enum class JourneyStatus { NOT_STARTED, IN_PROGRESS, PAUSED, FINISHED, CANCELLED
 
 /** Estados de visita. */
 enum class VisitStatus {
-    PLANNUED, EN_ROUTE, ARRIVED, IN_SERVICE, CONCLUDED, NOT_DONE, CANCELLED
+    PLANNED, EN_ROUTE, ARRIVED, IN_SERVICE, CONCLUDED, NOT_DONE, CANCELLED
 }
 
 enum class EventType {

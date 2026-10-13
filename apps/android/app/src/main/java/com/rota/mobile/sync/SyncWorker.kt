@@ -15,6 +15,8 @@ import com.rota.mobile.data.local.SyncEventDto
 import com.rota.mobile.data.local.SyncLocationDto
 import com.rota.mobile.data.repository.RouteRepository
 import com.rota.mobile.data.repository.toIso8601
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.util.concurrent.TimeUnit
 
@@ -102,9 +104,17 @@ class SyncWorker(
         }
 
         val response = RotaApi.sendLocations(applicationContext, json.encodeToString(payload))
-        // O servidor responde com aceitos + duplicados: ambos saem da fila.
-        val confirmed = (response.accepted + response.duplicates).toSet()
-        val toRemove = pending.map { it.clientPointId }.filter { it in confirmed }
+        // O contrato de localizacoes devolve CONTAGENS em accepted/duplicates
+        // (number), nao os ids - diferente do de eventos, que devolve string[].
+        // Somar os dois aqui produzia um Int, e `toSet()` sobre ele nao tinha
+        // como casar com nenhum clientPointId: a fila local nunca esvaziaria e
+        // os pontos seriam reenviados para sempre.
+        //
+        // Os ids que o servidor recusou voltam em `rejected`. Logo, o que NAO
+        // foi rejeitado foi aceito (ou reconhecido como duplicado) e pode sair
+        // da fila local.
+        val rejected = response.rejected.map { it.clientPointId }.toSet()
+        val toRemove = pending.map { it.clientPointId }.filterNot { it in rejected }
         if (toRemove.isNotEmpty()) repository.removeSyncedLocations(toRemove)
     }
 

@@ -152,7 +152,7 @@ class TimeCalculatorTest {
         assertEquals(300 + 120, breakdown.waitS)
         assertEquals(3600 + 600, breakdown.travelS)
         assertEquals(300, breakdown.unclassifiedS)
-        assertEquals(MeasurementQuality.EXATA, breakdown.quality)
+        assertEquals(MeasurementQuality.EXACT, breakdown.quality)
     }
 
     @Test
@@ -161,7 +161,7 @@ class TimeCalculatorTest {
             TimeCalculator.VisitTimes(1, "c1", arrivedAt = at(600), serviceStartedAt = null, serviceEndedAt = null, plannedTravelS = null),
         )
         val breakdown = TimeCalculator.buildBreakdown(at(0), null, visits)
-        assertEquals(MeasurementQuality.INCOMPLETA, breakdown.quality)
+        assertEquals(MeasurementQuality.INCOMPLETE, breakdown.quality)
         assertEquals(0, breakdown.serviceS)
     }
 }

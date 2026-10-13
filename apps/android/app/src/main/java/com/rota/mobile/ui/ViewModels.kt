@@ -8,8 +8,11 @@ import com.rota.mobile.domain.DomainRuleException
 import com.rota.mobile.domain.JourneyStateMachine
 import com.rota.mobile.domain.VisitEventType
 import com.rota.mobile.domain.VisitStateMachine
+import com.rota.mobile.domain.model.ApiJourneyStatus
+import com.rota.mobile.domain.model.ApiVisitStatus
 import com.rota.mobile.domain.model.EventType
 import com.rota.mobile.domain.model.JourneyStatus
+import com.rota.mobile.domain.model.VisitStatus
 import com.rota.mobile.location.LocationTrackingService
 import com.rota.mobile.sync.SyncWorker
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,13 +67,21 @@ class HomeViewModel(
             val stops = journey?.routeId?.let { repository.customersOf(it) }.orEmpty()
             _state.value = _state.value.copy(
                 journeyStatus = journey?.let {
-                    runCatching { JourneyStatus.valueOf(it.status) }.getOrDefault(JourneyStatus.NOT_STARTED)
+                    ApiJourneyStatus.paraStatus(it.status)
                 } ?: JourneyStatus.NOT_STARTED,
                 routeCode = journey?.routeId?.let { repository.route(it)?.code },
                 stopsPlanned = stops.size,
-                stopsConcluded = stops.count { it.visitStatus == "CONCLUDED" },
+                // `customersOf` devolve a ENTIDADE do Room, em que visitStatus e
+                // String no formato da API (portugues). Comparar direto com o
+                // enum daria sempre falso — e o contador ficaria em zero sem
+                // nenhum erro visivel. A traducao passa pelo mapper.
+                stopsConcluded = stops.count {
+                    ApiVisitStatus.paraStatus(it.visitStatus) == VisitStatus.CONCLUDED
+                },
                 stopsRemaining = stops.count {
-                    it.visitStatus !in setOf("CONCLUDED", "NOT_DONE", "CANCELLED")
+                    ApiVisitStatus.paraStatus(it.visitStatus) !in setOf(
+                        VisitStatus.CONCLUDED, VisitStatus.NOT_DONE, VisitStatus.CANCELLED,
+                    )
                 },
                 distanceM = journey?.let {
                     com.rota.mobile.location.repositoryDistance(repository, it.id)
@@ -196,9 +207,10 @@ class MyRouteViewModel(private val repository: RouteRepository) : ViewModel() {
     ) {
         viewModelScope.launch {
             try {
-                val current = runCatching {
-                    VisitStatus.valueOf(customer.visitStatus)
-                }.getOrDefault(com.rota.mobile.domain.model.VisitStatus.PLANNED)
+                // A entidade local guarda o status como String no formato da API.
+                // `VisitStatus.valueOf` exigiria o nome em ingles do enum e nunca
+                // casaria; o mapper e o ponto unico de traducao.
+                val current = ApiVisitStatus.paraStatus(customer.visitStatus)
                 val hasArrival = customer.arrivedAt != null
                 val hasServiceStart = customer.serviceStartedAt != null
                 VisitStateMachine.assertTransition(current, VisitStateMachine.statusFor(type), hasArrival, hasServiceStart)

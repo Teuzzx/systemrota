@@ -91,7 +91,7 @@ class RouteRepository private constructor(private val appContext: Context) {
             capturedAt = capturedAt,
             retainedUntil = capturedAt + retentionDays * 86_400_000L,
         )
-        db.pendingLocationDao().insertAll(listOf(entity)) > 0
+        db.pendingLocationDao().insertAll(listOf(entity)).isNotEmpty()
     }
 
     suspend fun pendingEventCount(): Int = withContext(Dispatchers.IO) { db.pendingEventDao().count() }

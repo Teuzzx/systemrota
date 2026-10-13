@@ -42,7 +42,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelProvider
+import com.rota.mobile.RotaApplication
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.rota.mobile.data.repository.RouteRepository
 import com.rota.mobile.domain.DistanceCalculator
 import com.rota.mobile.domain.TimeCalculator
@@ -58,14 +62,29 @@ import com.rota.mobile.ui.theme.RotaColors
 import com.rota.mobile.ui.theme.RotaTypography
 import java.time.LocalDate
 
-/** Cria os ViewModels com o repositorio local (sem framework de DI). */
-@Composable
-fun appViewModel(): HomeViewModel {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    return viewModel(factory = androidx.lifecycle.viewmodel.compose.viewModelFactory {
-        initializer { HomeViewModel(RouteRepository.get(context)) }
-    })
+/**
+ * Fabrica do ViewModel, NAO composavel.
+ *
+ * A Activity precisa do ViewModel fora da composicao: o launcher de permissao e
+ * registrado como propriedade e dispara antes (e fora) do setContent. Uma funcao
+ * @Composable nao pode ser chamada dali — o compilador recusava com
+ * "@Composable invocations can only happen from the context of a @Composable
+ * function".
+ *
+ * A Application vem de CreationExtras, que e o caminho idiomatico para isso.
+ * Pegar LocalContext dentro de um factory nao funciona: ele so existe durante a
+ * composicao.
+ */
+val appViewModelFactory: ViewModelProvider.Factory = viewModelFactory {
+    initializer {
+        val app = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]
+        HomeViewModel(RouteRepository.get(app as RotaApplication))
+    }
 }
+
+/** Mesma fabrica, resolvida dentro da composicao. Mesma instancia do Activity. */
+@Composable
+fun appViewModel(): HomeViewModel = viewModel(factory = appViewModelFactory)
 
 @Composable
 fun RotaApp(onRequestLocationPermission: () -> Unit) {
@@ -133,7 +152,7 @@ fun RotaApp(onRequestLocationPermission: () -> Unit) {
 
 private enum class Screen { LOGIN, HOME, ROUTE, CUSTOMER, HISTORY, SETTINGS }
 
-/** TELA 1 — LOGIN. */
+/** TELA 1 â€” LOGIN. */
 @Composable
 private fun LoginScreen(
     email: String,
@@ -189,7 +208,7 @@ private fun LoginScreen(
     }
 }
 
-/** TELA 2 — INICIO. */
+/** TELA 2 â€” INICIO. */
 @Composable
 private fun HomeScreen(
     state: HomeUiState,
@@ -330,7 +349,7 @@ private fun NavRow(label: String, onClick: () -> Unit) {
     }
 }
 
-/** TELA 3 — MINHA ROTA (lista; o mapa usa Google Maps via Intent externo). */
+/** TELA 3 â€” MINHA ROTA (lista). */
 @Composable
 private fun MyRouteScreen(onBack: () -> Unit, onOpenCustomer: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -338,43 +357,60 @@ private fun MyRouteScreen(onBack: () -> Unit, onOpenCustomer: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = onBack, modifier = Modifier.height(MinTouchTarget)) { Text("Voltar") }
         Spacer(Modifier.height(12.dp))
+        StopList(stops = sampleStops(), onOpen = onOpenCustomer)
+    }
+}
 
-        val samples = listOf(
-            Triple("1", "Mercearia Sao Jose", VisitStatus.PLANNED),
-            Triple("2", "Farmacia Central", VisitStatus.PLANNED),
-            Triple("3", "Distribuidora Boa Vista", VisitStatus.PLANNED),
-        )
+/**
+ * Antes a lista usava um Triple desestruturado dentro do `items`. Com tantas
+ * extensions `component3()` em escopo (Array, List e cada array primitivo), a
+ * inferencia de tipo fica ambigua e o build quebra com
+ * "Function 'component3()' is ambiguous for this expression".
+ * Uma classe nomeada deixa o tipo evidente e o codigo mais legivel.
+ */
+private data class SampleStop(val sequence: String, val name: String, val status: VisitStatus)
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(samples) { (sequence, name, status) ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = RotaColors.Surface),
-                    modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenCustomer),
+private fun sampleStops(): List<SampleStop> = listOf(
+    SampleStop("1", "Mercearia Sao Jose", VisitStatus.PLANNED),
+    SampleStop("2", "Farmacia Central", VisitStatus.PLANNED),
+    SampleStop("3", "Distribuidora Boa Vista", VisitStatus.PLANNED),
+)
+
+@Composable
+private fun StopList(stops: List<SampleStop>, onOpen: () -> Unit) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(stops) { stop ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = RotaColors.Surface),
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen),
+            ) {
+                Row(
+                    Modifier.padding(14.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Row(
-                        Modifier.padding(14.dp).fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    Box(
+                        Modifier.size(32.dp).background(RotaColors.ProgressDim, CircleShape),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Box(
-                            Modifier.size(32.dp).background(RotaColors.ProgressDim, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(sequence, style = RotaTypography.labelSmall, color = RotaColors.Progress)
-                        }
-                        Column(Modifier.weight(1f)) {
-                            Text(name, style = MaterialTheme.typography.titleMedium)
-                            Text("Picos · bairro nao informado", style = MaterialTheme.typography.bodyMedium, color = RotaColors.InkSecondary)
-                        }
-                        StatusBadge(visitTone(status), visitLabel(status))
+                        Text(stop.sequence, style = RotaTypography.labelSmall, color = RotaColors.Progress)
                     }
+                    Column(Modifier.weight(1f)) {
+                        Text(stop.name, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Picos Â· bairro nao informado",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = RotaColors.InkSecondary,
+                        )
+                    }
+                    StatusBadge(visitLabel(stop.status), visitTone(stop.status))
                 }
             }
         }
     }
 }
 
-/** TELA 4 — DETALHES DO CLIENTE. */
+/** TELA 4 â€” DETALHES DO CLIENTE. */
 @Composable
 private fun CustomerDetailScreen(onBack: () -> Unit) {
     Column(
@@ -388,13 +424,13 @@ private fun CustomerDetailScreen(onBack: () -> Unit) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Mercearia Sao Jose", style = MaterialTheme.typography.titleMedium)
                 Text("Rua Exemplo, 100", style = MaterialTheme.typography.bodyMedium)
-                Text("Sao Jose · Picos · PI", style = MaterialTheme.typography.bodyMedium, color = RotaColors.InkSecondary)
+                Text("Sao Jose Â· Picos Â· PI", style = MaterialTheme.typography.bodyMedium, color = RotaColors.InkSecondary)
                 Text(
                     "-7.0712, -45.0185",
                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                 )
-                Text("Posicao 1 de 3 · prevista 09:00", style = MaterialTheme.typography.bodyMedium, color = RotaColors.InkSecondary)
-                Text("Chegada: -- · Inicio: -- · Fim: --", style = MaterialTheme.typography.bodyMedium, color = RotaColors.InkSecondary)
+                Text("Posicao 1 de 3 Â· prevista 09:00", style = MaterialTheme.typography.bodyMedium, color = RotaColors.InkSecondary)
+                Text("Chegada: -- Â· Inicio: -- Â· Fim: --", style = MaterialTheme.typography.bodyMedium, color = RotaColors.InkSecondary)
             }
         }
 
@@ -426,7 +462,7 @@ private fun CustomerDetailScreen(onBack: () -> Unit) {
     }
 }
 
-/** TELA 5 — HISTORICO DA JORNADA. */
+/** TELA 5 â€” HISTORICO DA JORNADA. */
 @Composable
 private fun JourneyHistoryScreen(onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -454,7 +490,7 @@ private fun JourneyHistoryScreen(onBack: () -> Unit) {
     }
 }
 
-/** TELA 6 — CONFIGURACOES (somente leitura; sem acesso administrativo). */
+/** TELA 6 â€” CONFIGURACOES (somente leitura; sem acesso administrativo). */
 @Composable
 private fun SettingsScreen(onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -492,9 +528,11 @@ private fun visitTone(status: VisitStatus): StatusTone = when (status) {
     VisitStatus.CONCLUDED -> StatusTone.OK
     VisitStatus.NOT_DONE -> StatusTone.WARN
     VisitStatus.ARRIVED, VisitStatus.IN_SERVICE, VisitStatus.EN_ROUTE -> StatusTone.PROGRESS
-    else -> StatusTone.NEUTRAL
+    VisitStatus.PLANNED, VisitStatus.CANCELLED -> StatusTone.NEUTRAL
 }
 
+// Exaustivo de proposito: se o backend ganhar um estado novo, o compilador
+// falha aqui em vez de a tela mostrar um rotulo vazio em producao.
 private fun visitLabel(status: VisitStatus): String = when (status) {
     VisitStatus.PLANNED -> "PLANEJADA"
     VisitStatus.EN_ROUTE -> "A CAMINHO"

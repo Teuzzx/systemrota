@@ -93,20 +93,27 @@ object TimeCalculator {
 
         for (visit in visits.sortedBy { it.sequence }) {
             val reference = previousDeparture ?: journeyStartedAt
-            travelDuration(reference, visit.arrivedAt, visit.plannedTravelS)?.let {
-                travel += it.seconds
-                if (it.quality == MeasurementQuality.ESTIMATED) hasEstimated = true
-            } ?: hasIncomplete = true
+            // if/else explicito em vez de `?.let { } ?: flag = true`.
+            // O compilador reportava "Variable expected" apontando para a
+            // chamada da funcao, o que nao ajuda ninguem a descobrir o problema.
+            // O comportamento e identico; o diagnostico deixa de ser enganoso.
+            val travelSpan = travelDuration(reference, visit.arrivedAt, visit.plannedTravelS)
+            if (travelSpan == null) {
+                hasIncomplete = true
+            } else {
+                travel += travelSpan.seconds
+                if (travelSpan.quality == MeasurementQuality.ESTIMATED) hasEstimated = true
+            }
 
             if (visit.arrivedAt != null) {
-                waitDuration(visit.arrivedAt, visit.serviceStartedAt)?.let { wait += it.seconds }
-                    ?: hasIncomplete = true
+                val waitSpan = waitDuration(visit.arrivedAt, visit.serviceStartedAt)
+                if (waitSpan == null) hasIncomplete = true else wait += waitSpan.seconds
             } else {
                 hasIncomplete = true
             }
 
-            serviceDuration(visit.serviceStartedAt, visit.serviceEndedAt)?.let { service += it.seconds }
-                ?: hasIncomplete = true
+            val serviceSpan = serviceDuration(visit.serviceStartedAt, visit.serviceEndedAt)
+            if (serviceSpan == null) hasIncomplete = true else service += serviceSpan.seconds
 
             val departed = visit.serviceEndedAt
             if (departed != null) {
@@ -127,9 +134,9 @@ object TimeCalculator {
             pauseS = pauseTotalS,
             totalJourneyS = journeyTotal(journeyStartedAt, journeyEndedAt, pauseTotalS)?.seconds,
             quality = when {
-                hasIncomplete -> MeasurementQuality.INCOMPLETA
-                hasEstimated -> MeasurementQuality.ESTIMADA
-                else -> MeasurementQuality.EXATA
+                hasIncomplete -> MeasurementQuality.INCOMPLETE
+                hasEstimated -> MeasurementQuality.ESTIMATED
+                else -> MeasurementQuality.EXACT
             },
         )
     }

@@ -146,10 +146,16 @@ interface CustomerDao {
 interface PendingEventDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(events: List<PendingEventEntity>)
-
-    /** Idempotencia local: Ignore impede evento repetido na fila. */
+    /**
+     * Idempotencia local: Ignore impede evento repetido na fila.
+     *
+     * Retorna o rowid da linha inserida, ou -1 quando o conflito fez o insert
+     * ser ignorado. Sem esse retorno o repositorio nao tem como distinguir
+     * "enfileirado" de "ja existia" — e a comparacao com -1L nao compilava
+     * porque a assinatura devolvia Unit.
+     */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insert(event: PendingEventEntity)
+    suspend fun insert(event: PendingEventEntity): Long
 
     @Query("SELECT * FROM pending_events WHERE journeyId = :journeyId ORDER BY sequenceNo ASC LIMIT :limit")
     suspend fun pendingForJourney(journeyId: String, limit: Int): List<PendingEventEntity>
@@ -166,8 +172,13 @@ interface PendingEventDao {
 
 @Dao
 interface PendingLocationDao {
+    /**
+     * Igual ao insert de eventos: devolve os rowids das linhas efetivamente
+     * inseridas. Com Unit nao havia como responder se o ponto entrou na fila,
+     * e a comparacao `> 0` no repositorio nao compilava.
+     */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertAll(points: List<PendingLocationEntity>)
+    suspend fun insertAll(points: List<PendingLocationEntity>): List<Long>
 
     @Query("SELECT * FROM pending_locations WHERE journeyId = :journeyId ORDER BY capturedAt ASC LIMIT :limit")
     suspend fun pendingForJourney(journeyId: String, limit: Int): List<PendingLocationEntity>
